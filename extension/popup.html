@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ClauseGuard Hybrid</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 14px;
+      width: 360px;
+      background-color: #0f172a;
+      color: #f8fafc;
+      font-size: 13px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-weight: 700;
+      font-size: 14px;
+      color: #38bdf8;
+    }
+    .status-badge {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background-color: #1e293b;
+      color: #94a3b8;
+    }
+    .status-badge.ready {
+      background-color: #064e3b;
+      color: #34d399;
+    }
+    .status-badge.unavailable {
+      background-color: #451a03;
+      color: #fbbf24;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 8px;
+      transition: background-color 0.15s ease;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    button.secondary {
+      background-color: #334155;
+      color: #e2e8f0;
+    }
+    button.secondary:hover {
+      background-color: #475569;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    textarea {
+      width: 100%;
+      box-sizing: border-box;
+      height: 70px;
+      background-color: #1e293b;
+      border: 1px solid #475569;
+      color: #f8fafc;
+      border-radius: 6px;
+      padding: 6px;
+      font-size: 12px;
+      margin-bottom: 8px;
+      resize: vertical;
+    }
+    .card {
+      background-color: #1e293b;
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 10px;
+      border: 1px solid #334155;
+    }
+    .score-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .score-badge {
+      font-size: 16px;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .score-low { background-color: #064e3b; color: #34d399; }
+    .score-med { background-color: #78350f; color: #fbbf24; }
+    .score-high { background-color: #7f1d1d; color: #f87171; }
+    .telemetry {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .flags-list {
+      margin: 6px 0;
+      padding-left: 18px;
+      color: #fca5a5;
+    }
+    .flags-list li {
+      margin-bottom: 3px;
+    }
+    .redacted-preview {
+      background: #0f172a;
+      padding: 6px;
+      border-radius: 4px;
+      max-height: 80px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 11px;
+      color: #cbd5e1;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">ClauseGuard Hybrid</div>
+    <div id="nanoStatus" class="status-badge">Checking Nano...</div>
+  </div>
+
+  <button id="btnGrabSelection">Grab Selected Text from Tab</button>
+  <textarea id="inputText" placeholder="Select contract text on page, or paste text here..."></textarea>
+  
+  <button id="btnRunAirGap">Run Local Air-Gap Scan</button>
+  <button id="btnOpenWeb" class="secondary">Open ClauseGuard Web Studio</button>
+
+  <div id="resultsCard" class="card" style="display: none;">
+    <div class="score-row">
+      <span>Risk Assessment:</span>
+      <span id="riskBadge" class="score-badge">0 / 100</span>
+    </div>
+    <div id="localVerdict" style="font-weight: 600; margin-bottom: 6px;"></div>
+    <div><strong>Detected Flags:</strong></div>
+    <ul id="flagsList" class="flags-list"></ul>
+    
+    <div><strong>Redacted Content (Air-Gapped):</strong></div>
+    <div id="redactedPreview" class="redacted-preview"></div>
+
+    <div class="telemetry">
+      <span id="latencySpan">Latency: -- ms</span>
+      <span id="bytesSpan">Network: 0 Bytes</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

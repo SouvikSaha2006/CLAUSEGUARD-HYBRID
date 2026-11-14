@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "ClauseGuard Hybrid - Air-Gap Contract Guard",
+  "version": "1.0.0",
+  "description": "On-device contract risk scanning and PII air-gap redaction using Gemini Nano (#BuildHybridAI).",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ClauseGuard Hybrid"
+  }
+}
