@@ -5,6 +5,8 @@ import { ai } from './firebase';
 
 export type OnDeviceStatus = 'ready' | 'downloading' | 'unavailable';
 
+export type EntityCategory = 'PERSON' | 'ORG' | 'COMPENSATION' | 'CONTACT' | 'ID';
+
 export interface Stage1Result {
   redactedText: string;
   piiRedactedCount: number;
@@ -14,6 +16,8 @@ export interface Stage1Result {
   engineUsed: 'ON_DEVICE_NANO' | 'CLOUD_FALLBACK';
   latencyMs: number;
   networkBytesSent: number;
+  entityVault: Record<string, string>;
+  vaultEntriesCount: number;
 }
 
 export interface ClauseBreakdownItem {
@@ -29,6 +33,96 @@ export interface Stage2Result {
   counterOfferEmailDraft: string;
   engineUsed: 'CLOUD_GEMINI_2_5_FLASH';
   latencyMs: number;
+}
+
+/**
+ * In-memory Zero-Knowledge Entity Vault Manager.
+ * Operates strictly in client ephemeral memory. Never sent to cloud or saved in database.
+ */
+export class EntityVaultManager {
+  private counters: Record<EntityCategory, number> = {
+    PERSON: 1,
+    ORG: 1,
+    COMPENSATION: 1,
+    CONTACT: 1,
+    ID: 1,
+  };
+
+  // Map normalized raw string -> token (e.g. "jordan taylor" -> "[PERSON_1]")
+  private valueToToken = new Map<string, string>();
+
+  // Map token -> original string (e.g. "[PERSON_1]" -> "Jordan Taylor")
+  public vault: Record<string, string> = {};
+
+  register(rawValue: string, category: EntityCategory): string {
+    const trimmed = rawValue.trim();
+    // Ignore trivial or empty strings
+    if (!trimmed || trimmed.length < 2) return '';
+
+    // Ignore strings that are already bracketed tokens
+    if (/^\[[A-Z_]+_\d+\]$/.test(trimmed) || /^\[REDACTED_[A-Z_]+\]$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    const lower = trimmed.toLowerCase();
+
+    // Check exact or case-insensitive match
+    if (this.valueToToken.has(lower)) {
+      return this.valueToToken.get(lower)!;
+    }
+
+    // Reuse existing token if it's a known person/org prefix or suffix (e.g. "Alex" for "Alex J. Mercer")
+    if (category === 'PERSON' || category === 'ORG') {
+      for (const [existingVal, token] of this.valueToToken.entries()) {
+        if (token.startsWith(`[${category}_`)) {
+          if (existingVal.includes(lower) || lower.includes(existingVal)) {
+            this.valueToToken.set(lower, token);
+            return token;
+          }
+        }
+      }
+    }
+
+    const index = this.counters[category]++;
+    const token = `[${category}_${index}]`;
+
+    this.valueToToken.set(lower, token);
+    this.vault[token] = trimmed;
+    return token;
+  }
+
+  getVault(): Record<string, string> {
+    return { ...this.vault };
+  }
+
+  size(): number {
+    return Object.keys(this.vault).length;
+  }
+
+  /**
+   * Replaces all registered vault entities inside text.
+   * Longer entity values (and aliases) are substituted first to avoid partial overlap corruption.
+   */
+  applyRedaction(text: string): { redactedText: string; count: number } {
+    let redacted = text;
+    let count = 0;
+
+    // Sort registered values and aliases by length descending
+    const entries = Array.from(this.valueToToken.entries()).sort((a, b) => b[0].length - a[0].length);
+
+    for (const [val, token] of entries) {
+      if (!val || val.length < 2) continue;
+      const escaped = val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, 'gi');
+      const matches = redacted.match(regex);
+      if (matches && matches.length > 0) {
+        count += matches.length;
+        redacted = redacted.replace(regex, token);
+      }
+    }
+
+    return { redactedText: redacted, count };
+  }
 }
 
 /**
@@ -99,71 +193,154 @@ export async function checkOnDeviceStatus(): Promise<OnDeviceStatus> {
 
 /**
  * High-performance deterministic on-device regex/heuristic sanitizer.
- * Runs 100% locally in zero network milliseconds.
+ * Runs 100% locally in zero network milliseconds and populates the in-memory Entity Vault.
  */
-export function sanitizeClientSideLocally(text: string): {
+export function sanitizeClientSideLocally(
+  text: string,
+  existingVaultMgr?: EntityVaultManager
+): {
   redactedText: string;
   piiRedactedCount: number;
   riskScore: number;
   detectedFlags: string[];
   localVerdict: string;
+  entityVault: Record<string, string>;
+  vaultEntriesCount: number;
 } {
-  let count = 0;
+  const vaultMgr = existingVaultMgr || new EntityVaultManager();
   const flags: string[] = [];
   let score = 15;
 
-  let redacted = text;
-
-  // 1. Redact Emails
+  // 1. Register Emails -> [CONTACT_n]
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-  const emails = redacted.match(emailRegex) || [];
-  count += emails.length;
-  redacted = redacted.replace(emailRegex, '[REDACTED_CONTACT]');
-
-  // 2. Redact Phone numbers
-  const phoneRegex = /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
-  const phones = redacted.match(phoneRegex) || [];
-  count += phones.length;
-  redacted = redacted.replace(phoneRegex, '[REDACTED_CONTACT]');
-
-  // 3. Redact SSN / Tax IDs
-  const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
-  const ssns = redacted.match(ssnRegex) || [];
-  count += ssns.length;
-  redacted = redacted.replace(ssnRegex, '[REDACTED_ID]');
-
-  // 4. Redact Specific ID tags (e.g. EMP-2026-9811)
-  const idRegex = /\b(ID Reference:\s*|SSN:\s*|Tax ID:\s*)([^\n,]+)/gi;
-  redacted = redacted.replace(idRegex, (_match, prefix) => {
-    count++;
-    return `${prefix}[REDACTED_ID]`;
-  });
-
-  // 5. Redact Compensation / Exact Salaries
-  const salaryRegex = /\$\s?\d{1,3}(,\d{3})*(\.\d{2})?(\s?(per\s?year|\/yr|annually|hourly|\/hr))?/gi;
-  const salaries = redacted.match(salaryRegex) || [];
-  count += salaries.length;
-  redacted = redacted.replace(salaryRegex, '[REDACTED_SALARY]');
-
-  // 6. Redact Candidate Names from headers
-  const namePatterns = [
-    /Candidate Name:\s*([^\n,]+)/gi,
-    /Candidate:\s*([^\n,]+)/gi,
-    /Employee:\s*([^\n,]+)/gi,
-    /Dear\s+([A-Z][a-z]+(\s+[A-Z][a-z]+)?),/g,
-  ];
-  for (const pat of namePatterns) {
-    redacted = redacted.replace(pat, (match, captured) => {
-      count++;
-      return match.replace(captured, '[REDACTED_NAME]');
-    });
+  const emails = text.match(emailRegex) || [];
+  for (const email of emails) {
+    vaultMgr.register(email, 'CONTACT');
   }
 
-  // 7. Redact Addresses
-  const addressRegex = /\b\d{1,5}\s+([A-Za-z0-9#.\s]+),\s*([A-Za-z\s]+),\s*([A-Z]{2})\s*(\d{5})(-\d{4})?\b/g;
-  const addresses = redacted.match(addressRegex) || [];
-  count += addresses.length;
-  redacted = redacted.replace(addressRegex, '[REDACTED_ADDRESS]');
+  // 2. Register Phone numbers -> [CONTACT_n]
+  const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
+  const phones = text.match(phoneRegex) || [];
+  for (const phone of phones) {
+    vaultMgr.register(phone, 'CONTACT');
+  }
+
+  // 3. Register Physical Addresses -> [CONTACT_n]
+  const addressRegex = /\b\d{1,5}\s+([A-Za-z0-9#.\s]+),\s*(?:Suite\s+[0-9A-Za-z]+,\s*|Apt\s+[0-9A-Za-z]+,\s*)?([A-Za-z\s]+),\s*([A-Z]{2})\s*(\d{5})(?:-\d{4})?\b/g;
+  const addresses = text.match(addressRegex) || [];
+  for (const addr of addresses) {
+    vaultMgr.register(addr, 'CONTACT');
+  }
+
+  const prefixedAddrRegex = /(?:Candidate\s+Address|Address):\s*([^\n,\r]+(?:,\s*[^\n,\r]+)+)/gi;
+  let addrMatch: RegExpExecArray | null;
+  while ((addrMatch = prefixedAddrRegex.exec(text)) !== null) {
+    if (addrMatch[1]) {
+      vaultMgr.register(addrMatch[1].trim(), 'CONTACT');
+    }
+  }
+
+  // 4. Register SSNs / Tax IDs / PAN / Aadhaar / Passport / Bank IDs -> [ID_n]
+  const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
+  const ssns = text.match(ssnRegex) || [];
+  for (const ssn of ssns) {
+    vaultMgr.register(ssn, 'ID');
+  }
+
+  const panRegex = /\b[A-Z]{5}[0-9]{4}[A-Z]\b/g;
+  const pans = text.match(panRegex) || [];
+  for (const pan of pans) {
+    vaultMgr.register(pan, 'ID');
+  }
+
+  const aadhaarRegex = /\b\d{4}[-\s]\d{4}[-\s]\d{4}\b/g;
+  const aadhaars = text.match(aadhaarRegex) || [];
+  for (const aadh of aadhaars) {
+    vaultMgr.register(aadh, 'ID');
+  }
+
+  const idPrefixedRegex = /\b(ID Reference|SSN|Social Security Number(?:\s*\/\s*Tax ID)?|Tax ID|PAN|Aadhaar|Passport(?:\s*(?:No|Number))?|Bank Account|Routing(?:\s*Number)?):\s*([^\n,\r]+)/gi;
+  let idMatch: RegExpExecArray | null;
+  while ((idMatch = idPrefixedRegex.exec(text)) !== null) {
+    if (idMatch[2]) {
+      vaultMgr.register(idMatch[2].trim(), 'ID');
+    }
+  }
+
+  const empIdRegex = /\b(EMP|REF|ID)-[0-9A-Z]{4,12}\b/gi;
+  const empIds = text.match(empIdRegex) || [];
+  for (const emp of empIds) {
+    vaultMgr.register(emp, 'ID');
+  }
+
+  // 5. Register Salaries / Bonuses / Compensation figures -> [COMPENSATION_n]
+  const currencyRegex = /(?:\$|USD|INR|₹|Rs\.?)\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?:\s?(?:per\s?year|\/yr|annually|hourly|\/hr|per\s?month|\/mo|k|million|lakh|crore))?/gi;
+  const currencies = text.match(currencyRegex) || [];
+  for (const curr of currencies) {
+    vaultMgr.register(curr, 'COMPENSATION');
+  }
+
+  const compPrefixedRegex = /\b(Base Salary|Sign-On Bonus|Base Compensation|Bonus|Liquidated damages|amount of):\s*([^\n,\r]+)/gi;
+  let compMatch: RegExpExecArray | null;
+  while ((compMatch = compPrefixedRegex.exec(text)) !== null) {
+    if (compMatch[2]) {
+      const val = compMatch[2].trim();
+      if (/\d/.test(val)) {
+        vaultMgr.register(val, 'COMPENSATION');
+      }
+    }
+  }
+
+  // 6. Register Candidate / Person Names -> [PERSON_n]
+  const namePrefixedRegex = /\b(Candidate Name|Candidate|Employee|Prepared for|Payable to):\s*([^\n,\r]+)/gi;
+  let nameMatch: RegExpExecArray | null;
+  while ((nameMatch = namePrefixedRegex.exec(text)) !== null) {
+    if (nameMatch[2]) {
+      const val = nameMatch[2].trim();
+      if (val.length > 2 && !val.includes('$') && !/^\d+$/.test(val)) {
+        vaultMgr.register(val, 'PERSON');
+      }
+    }
+  }
+
+  const dearRegex = /Dear\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?),/g;
+  let dearMatch: RegExpExecArray | null;
+  while ((dearMatch = dearRegex.exec(text)) !== null) {
+    if (dearMatch[1]) {
+      vaultMgr.register(dearMatch[1].trim(), 'PERSON');
+    }
+  }
+
+  // 7. Register Organization / Company Names -> [ORG_n]
+  const firstLines = text.slice(0, 320).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (firstLines.length > 0) {
+    const topHeader = firstLines[0];
+    if (/(?:INC|LLC|PBC|CORP|LTD|SYSTEMS|TECHNOLOGIES|SOLUTIONS)\b/i.test(topHeader)) {
+      vaultMgr.register(topHeader, 'ORG');
+    }
+  }
+
+  const orgPrefixedRegex = /\b(Company|Employer|Organization|Recipient):\s*([^\n,\r]+)/gi;
+  let orgMatch: RegExpExecArray | null;
+  while ((orgMatch = orgPrefixedRegex.exec(text)) !== null) {
+    if (orgMatch[2]) {
+      const val = orgMatch[2].trim();
+      if (val.length > 2 && !val.includes('@') && !val.includes('http')) {
+        vaultMgr.register(val, 'ORG');
+      }
+    }
+  }
+
+  const behalfRegex = /On behalf of\s+([A-Z][A-Za-z0-9\s.,&-]+?(?:,\s*PBC|,\s*Inc\.?|,\s*LLC)?)(?:,\s*we\s+are|\s*\()/gi;
+  let behalfMatch: RegExpExecArray | null;
+  while ((behalfMatch = behalfRegex.exec(text)) !== null) {
+    if (behalfMatch[1]) {
+      vaultMgr.register(behalfMatch[1].trim(), 'ORG');
+    }
+  }
+
+  // Apply substitutions from vault
+  const { redactedText, count } = vaultMgr.applyRedaction(text);
 
   // 8. Analyze Predatory Clauses and Scam Signatures
   const lower = text.toLowerCase();
@@ -231,11 +408,13 @@ export function sanitizeClientSideLocally(text: string): {
   }
 
   return {
-    redactedText: redacted,
+    redactedText,
     piiRedactedCount: Math.max(1, count),
     riskScore: score,
     detectedFlags: flags.length > 0 ? flags : ['No severe predatory risks detected.'],
     localVerdict: verdict,
+    entityVault: vaultMgr.getVault(),
+    vaultEntriesCount: vaultMgr.size(),
   };
 }
 
@@ -244,6 +423,7 @@ export function sanitizeClientSideLocally(text: string): {
  * Uses fast entity extraction (<100 output tokens) so Nano completes in 1.5–3s on CPU/iGPU laptops.
  * Uses InferenceMode.ONLY_ON_DEVICE (or PREFER_ON_DEVICE if forcePreferOnDevice is set).
  * Enforces a 12-second timeout and instantaneous deterministic client-side regex fallback.
+ * Generates an in-memory Zero-Knowledge Entity Vault with numbered semantic tokens.
  */
 export async function runStage1LocalAirGap(
   rawText: string,
@@ -251,6 +431,7 @@ export async function runStage1LocalAirGap(
 ): Promise<Stage1Result> {
   const startTime = performance.now();
   const mode = forcePreferOnDevice ? InferenceMode.PREFER_ON_DEVICE : InferenceMode.ONLY_ON_DEVICE;
+  const vaultMgr = new EntityVaultManager();
 
   // Primary attempt via Firebase AI Logic getGenerativeModel with 12s timeout
   try {
@@ -269,19 +450,20 @@ export async function runStage1LocalAirGap(
 Extract sensitive personally identifiable information (PII) items from this contract and evaluate risk.
 Do NOT output the full contract text. Output ONLY a strict JSON object conforming to this schema:
 {
-  "pii": [
-    { "value": "exact string to redact", "tag": "[REDACTED_NAME]" }
+  "entities": [
+    { "value": "exact string to redact", "category": "PERSON" }
   ],
   "riskScore": 75,
   "detectedFlags": ["short risk flag 1", "short risk flag 2"],
   "localVerdict": "one-sentence summary"
 }
 
-Allowed tags for "tag":
-- "[REDACTED_NAME]": Candidate/employee/founder names
-- "[REDACTED_CONTACT]": Email addresses, phone numbers, handle IDs
-- "[REDACTED_SALARY]": Salary figures, dollar amounts, wire figures, checks
-- "[REDACTED_ID]": SSNs, national identification numbers, tax IDs
+Allowed categories for "category":
+- "PERSON": Candidate/employee/founder/recruiter personal names
+- "ORG": Company names, employer names, vendor organizations
+- "COMPENSATION": Salary figures, bonuses, equity, checks, fees, wire amounts
+- "CONTACT": Email addresses, phone numbers, street/physical addresses
+- "ID": SSNs, national identification numbers, PAN, Aadhaar, passport numbers, tax/bank account IDs
 
 Contract Document:
 ${rawText}`;
@@ -307,35 +489,28 @@ ${rawText}`;
     }
     const parsed = JSON.parse(cleanedJson);
 
-    // Instantaneous TypeScript reconstruction of redacted text
-    let redacted = rawText;
-    let count = 0;
+    // 1. Register Nano extracted entities into the vault manager
+    const extractedList = Array.isArray(parsed.entities)
+      ? parsed.entities
+      : Array.isArray(parsed.pii)
+      ? parsed.pii
+      : [];
 
-    // 1. Replace extracted Nano entities (longer strings first to avoid partial overlap)
-    if (Array.isArray(parsed.pii)) {
-      const sortedPii = [...parsed.pii]
-        .filter((item) => item && typeof item.value === 'string' && item.value.trim().length > 1)
-        .sort((a, b) => b.value.length - a.value.length);
-
-      for (const item of sortedPii) {
-        const val = item.value.trim();
-        const tag = item.tag || '[REDACTED_NAME]';
-        if (val.length > 1 && redacted.includes(val)) {
-          const escaped = val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const regex = new RegExp(escaped, 'g');
-          const matches = redacted.match(regex);
-          if (matches) {
-            count += matches.length;
-            redacted = redacted.replace(regex, tag);
-          }
-        }
+    for (const item of extractedList) {
+      if (item && typeof item.value === 'string' && item.value.trim().length > 1) {
+        let cat: EntityCategory = 'PERSON';
+        const rawCategory = String(item.category || item.tag || '').toUpperCase();
+        if (rawCategory.includes('ORG') || rawCategory.includes('COMPAN')) cat = 'ORG';
+        else if (rawCategory.includes('COMP') || rawCategory.includes('SALARY') || rawCategory.includes('MONEY')) cat = 'COMPENSATION';
+        else if (rawCategory.includes('CONTACT') || rawCategory.includes('EMAIL') || rawCategory.includes('PHONE') || rawCategory.includes('ADDR')) cat = 'CONTACT';
+        else if (rawCategory.includes('ID') || rawCategory.includes('SSN') || rawCategory.includes('PAN') || rawCategory.includes('TAX')) cat = 'ID';
+        else if (rawCategory.includes('NAME') || rawCategory.includes('PERSON')) cat = 'PERSON';
+        vaultMgr.register(item.value, cat);
       }
     }
 
     // 2. Deterministic regex safety passes for emails, phones, SSNs, IDs, and salaries
-    const safetyResult = sanitizeClientSideLocally(redacted);
-    redacted = safetyResult.redactedText;
-    count += safetyResult.piiRedactedCount;
+    const safetyResult = sanitizeClientSideLocally(rawText, vaultMgr);
 
     // Combine risk metrics
     const nanoScore = typeof parsed.riskScore === 'number' ? parsed.riskScore : safetyResult.riskScore;
@@ -351,14 +526,16 @@ ${rawText}`;
     const latencyMs = Math.round(performance.now() - startTime);
 
     return {
-      redactedText: redacted,
-      piiRedactedCount: Math.max(1, count),
+      redactedText: safetyResult.redactedText,
+      piiRedactedCount: Math.max(1, safetyResult.piiRedactedCount),
       riskScore: finalScore,
       detectedFlags: combinedFlags.length > 0 ? combinedFlags : ['No severe predatory risks detected.'],
       localVerdict: parsed.localVerdict || safetyResult.localVerdict,
       engineUsed: 'ON_DEVICE_NANO',
       latencyMs,
       networkBytesSent: 0,
+      entityVault: safetyResult.entityVault,
+      vaultEntriesCount: safetyResult.vaultEntriesCount,
     };
   } catch (err) {
     console.info(
@@ -367,7 +544,7 @@ ${rawText}`;
     );
 
     // Deterministic client-side air-gap execution fallback
-    const localResult = sanitizeClientSideLocally(rawText);
+    const localResult = sanitizeClientSideLocally(rawText, vaultMgr);
     const latencyMs = Math.round(performance.now() - startTime);
 
     return {
@@ -384,7 +561,10 @@ ${rawText}`;
  * Guardrail: Verifies that text is already redacted and contains NO raw PII before transmission.
  * Uses InferenceMode.ONLY_IN_CLOUD with gemini-2.5-flash.
  */
-export async function runStage2CloudAudit(redactedText: string): Promise<Stage2Result> {
+export async function runStage2CloudAudit(
+  redactedText: string,
+  entityVault?: Record<string, string>
+): Promise<Stage2Result> {
   const startTime = performance.now();
 
   // Guardrail 1: Empty text validation
@@ -413,13 +593,30 @@ export async function runStage2CloudAudit(redactedText: string): Promise<Stage2R
     );
   }
 
-  const prompt = `You are a high-tier legal auditor analyzing an anonymized employment agreement where all personal identifiable information (PII) has been air-gap redacted.
+  // Guardrail 3: Strict pre-flight assertion verifying that none of the original values in entityVault appear in payload
+  if (entityVault) {
+    for (const [token, originalVal] of Object.entries(entityVault)) {
+      const trimmed = originalVal?.trim();
+      if (trimmed && trimmed.length >= 2) {
+        if (redactedText.toLowerCase().includes(trimmed.toLowerCase())) {
+          throw new Error(
+            `Air-Gap Pre-Flight Guardrail Block: Raw sensitive value "${trimmed}" (${token}) detected in cloud payload. Transmission blocked to prevent PII leak.`
+          );
+        }
+      }
+    }
+  }
+
+  const prompt = `You are a high-tier legal auditor analyzing an anonymized employment agreement where all personal identifiable information (PII) has been air-gap redacted using a Zero-Knowledge Entity Vault.
+
+CRITICAL PRIVACY TOKEN INSTRUCTION:
+The contract contains privacy tokens such as [PERSON_1], [ORG_1], [COMPENSATION_1], and [CONTACT_1]. Preserve these exact bracketed tokens verbatim inside your executiveSummary, clauseBreakdown, and counterOfferEmailDraft. Do NOT invent real names or remove the bracketed tokens.
 
 Analyze the following sanitized contract and provide:
-1. Executive Summary: High-level executive overview of risks and legal liabilities.
+1. Executive Summary: High-level executive overview of risks and legal liabilities. Preserve privacy tokens.
 2. Clause Breakdown: Array of clauses with riskLevel ('LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL') and clear explanation.
 3. Authenticity Verdict: Clear verdict on whether the document is a counterfeit job scam, predatory contract, or standard legitimate offer.
-4. Counter-Offer Email Draft: Professional, polite email draft to HR or the recruiter proposing safe amendments or questioning suspicious items.
+4. Counter-Offer Email Draft: Professional, polite email draft to HR or the recruiter proposing safe amendments or questioning suspicious items. Address the recipient organization as [ORG_1] and sign as [PERSON_1].
 
 Return ONLY strict valid JSON:
 {
@@ -480,39 +677,39 @@ ${redactedText}`;
         clause: 'Equipment Procurement via Cashier Check & Wire',
         riskLevel: 'CRITICAL',
         explanation:
-          'Classic counterfeit check advance-fee scheme. The bank will reverse the deposit when the check bounces, leaving the victim liable for funds transferred to the fake vendor.',
+          'Classic counterfeit check advance-fee scheme. The bank will reverse the deposit when the check bounces, leaving [PERSON_1] liable for funds transferred to the fake vendor.',
       });
       breakdown.push({
         clause: 'Informal Hiring & Interview Platform (Telegram)',
         riskLevel: 'CRITICAL',
         explanation:
-          'Legitimate enterprise employers do not conduct interviews exclusively via unverified messaging channels without identity verification.',
+          'Legitimate enterprise employers like [ORG_1] do not conduct interviews exclusively via unverified messaging channels without identity verification.',
       });
     } else if (isPredatory) {
       breakdown.push({
         clause: '24-Month Worldwide Non-Compete',
         riskLevel: 'CRITICAL',
         explanation:
-          'Overly broad geographic scope and excessive 2-year duration severely restricts future employment and violates FTC guidelines and state public policy.',
+          'Overly broad geographic scope and excessive 2-year duration severely restricts future employment of [PERSON_1] and violates FTC guidelines and state public policy.',
       });
       breakdown.push({
         clause: 'Universal Invention Assignment (Personal Time & Prior Works)',
         riskLevel: 'HIGH',
         explanation:
-          'Attempts to claim ownership over works created outside of working hours without company resources, exceeding permissible statutory boundaries (e.g. CA Lab Code 2870).',
+          'Attempts to claim ownership over works created by [PERSON_1] outside working hours without [ORG_1] resources, exceeding permissible statutory boundaries (e.g. CA Lab Code 2870).',
       });
       breakdown.push({
-        clause: '$250,000 Liquidated Damages & Fee Shifting',
+        clause: 'Liquidated Damages & Fee Shifting',
         riskLevel: 'HIGH',
         explanation:
-          'Punitive liquidated damages clause designed to intimidate rather than compensate for actual damages.',
+          'Punitive liquidated damages clause designed by [ORG_1] to intimidate rather than compensate for actual damages.',
       });
     } else {
       breakdown.push({
         clause: 'Intellectual Property Assignment',
         riskLevel: 'LOW',
         explanation:
-          'Appropriately scoped to creations made during working hours or directly related to company scope, with explicit carve-out for prior inventions.',
+          'Appropriately scoped to creations made during working hours or directly related to [ORG_1] scope, with explicit carve-out for prior inventions of [PERSON_1].',
       });
       breakdown.push({
         clause: 'Absence of Post-Employment Non-Compete',
@@ -525,23 +722,24 @@ ${redactedText}`;
 
     return {
       executiveSummary: isScam
-        ? 'DANGER: Highly probable advance-fee employment scam. Immediate wire transfer required for equipment is a known fraud vector.'
+        ? 'DANGER: Highly probable advance-fee employment scam involving [ORG_1]. Immediate wire transfer required for equipment is a known fraud vector targeting [PERSON_1].'
         : isPredatory
-        ? 'HIGH RISK: Unusually aggressive restrictive covenants and overbroad IP assignment that pose severe career encumbrance.'
-        : 'FAIR TERMS: Standard, balanced engineering employment offer compliant with fair labor best practices.',
+        ? 'HIGH RISK: Unusually aggressive restrictive covenants and overbroad IP assignment imposed by [ORG_1] that pose severe career encumbrance on [PERSON_1].'
+        : 'FAIR TERMS: Standard, balanced engineering employment offer from [ORG_1] compliant with fair labor best practices.',
       clauseBreakdown: breakdown,
       authenticityVerdict: isScam
         ? 'FRAUDULENT / COUNTERFEIT: High-confidence advance-fee check scam.'
         : isPredatory
-        ? 'LEGAL RISK: Valid legal entity but punitive and unconscionable clauses.'
-        : 'LEGITIMATE: Standard commercial employment offer.',
+        ? 'LEGAL RISK: Valid legal entity [ORG_1] but punitive and unconscionable clauses.'
+        : 'LEGITIMATE: Standard commercial employment offer from [ORG_1].',
       counterOfferEmailDraft: isScam
-        ? `Dear Recruiting Team,\n\nI have reviewed the offer. To adhere to corporate financial security practices, I request that Beacon / ApexCloud ship pre-configured hardware directly from your corporate supplier, rather than processing personal funds or cashier checks. Please confirm if hardware can be dispatched directly.\n\nBest regards,\n[REDACTED_NAME]`
+        ? `Dear Recruiting Team at [ORG_1],\n\nI have reviewed the offer. To adhere to corporate financial security practices, I request that [ORG_1] ship pre-configured hardware directly from your corporate supplier, rather than processing personal funds or cashier checks. Please confirm if hardware can be dispatched directly.\n\nBest regards,\n[PERSON_1]`
         : isPredatory
-        ? `Dear Hiring Team,\n\nThank you for this offer. I am excited about the prospect of joining the team. Upon review of Sections 1 and 2, I would like to propose standard amendments:\n1. Non-compete: Restricting duration to 6 months in direct competing products rather than worldwide 24 months.\n2. Inventions: Confirming that personal side projects developed outside work hours on personal hardware remain excluded per Exhibit A.\n\nLooking forward to your thoughts.\n\nSincerely,\n[REDACTED_NAME]`
-        : `Dear Hiring Manager,\n\nThank you for extending this offer. I am thrilled to accept the position of Senior Full-Stack Engineer and look forward to joining the team on the scheduled start date.\n\nWarm regards,\n[REDACTED_NAME]`,
+        ? `Dear Hiring Team at [ORG_1],\n\nThank you for this offer. I am excited about the prospect of joining [ORG_1]. Upon review of Sections 1 and 2, I would like to propose standard amendments:\n1. Non-compete: Restricting duration to 6 months in direct competing products rather than worldwide 24 months.\n2. Inventions: Confirming that personal side projects developed outside work hours on personal hardware remain excluded per Exhibit A.\n\nLooking forward to your thoughts.\n\nSincerely,\n[PERSON_1]`
+        : `Dear Hiring Manager at [ORG_1],\n\nThank you for extending this offer. I am thrilled to accept the position on the Core Platform team and look forward to joining [ORG_1] on the scheduled start date.\n\nWarm regards,\n[PERSON_1]`,
       engineUsed: 'CLOUD_GEMINI_2_5_FLASH',
       latencyMs,
     };
   }
 }
+

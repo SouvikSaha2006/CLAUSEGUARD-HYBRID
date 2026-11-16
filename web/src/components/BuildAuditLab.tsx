@@ -80,6 +80,10 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
   const [activePresetId, setActivePresetId] = useState<string>('fake-remote-tech-scam');
   const [localRoutingMode, setLocalRoutingMode] = useState<'only' | 'prefer'>('only');
 
+  // Feature 1: Zero-Knowledge Entity Vault & Local Re-Hydration state
+  const [isVaultOpen, setIsVaultOpen] = useState(true);
+  const [isRehydrated, setIsRehydrated] = useState(false);
+
   // Flash feedbacks
   const [copiedFlash, setCopiedFlash] = useState<string | null>(null);
   const [remoteConfigFlash, setRemoteConfigFlash] = useState<string | null>(null);
@@ -129,6 +133,8 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
   // Handle Preset selection
   const handleSelectPreset = (presetId: string) => {
     setActivePresetId(presetId);
+    setIsRehydrated(false);
+    setIsVaultOpen(true);
     const p = loadPreset(presetId);
     if (p) {
       if (presetId === 'fake-remote-tech-scam') {
@@ -148,6 +154,8 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
   const handlePdfUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setIsRehydrated(false);
+      setIsVaultOpen(true);
       await uploadPdf(file);
       setDocType('uploaded PDF document');
       setCompanyName(file.name.replace('.pdf', ''));
@@ -191,13 +199,31 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
     setMagneticOffset({ x: 0, y: 0 });
   };
 
+  // Re-hydrate text helper using local Entity Vault
+  const rehydrateText = (text: string, vault?: Record<string, string>): string => {
+    if (!text || !vault) return text;
+    return text.replace(/\[([A-Z_]+_\d+)\]/g, (match) => {
+      return vault[match] !== undefined ? vault[match] : match;
+    });
+  };
+
   // Highlight Redaction Tokens helper for Side-by-Side Diff
   const renderHighlightedRedactedText = (text: string) => {
-    const parts = text.split(/(\[REDACTED_[A-Z_]+\])/g);
+    const parts = text.split(/(\[(?:PERSON|ORG|COMPENSATION|CONTACT|ID)_\d+\]|\[REDACTED_[A-Z_]+\])/g);
     return parts.map((part, idx) => {
-      if (part.startsWith('[REDACTED_') && part.endsWith(']')) {
+      if (
+        part.startsWith('[') &&
+        part.endsWith(']') &&
+        (part.includes('_') || part.startsWith('[REDACTED_'))
+      ) {
+        let catClass = 'token-person';
+        if (part.startsWith('[ORG_')) catClass = 'token-org';
+        else if (part.startsWith('[COMPENSATION_') || part.includes('SALARY')) catClass = 'token-comp';
+        else if (part.startsWith('[CONTACT_')) catClass = 'token-contact';
+        else if (part.startsWith('[ID_')) catClass = 'token-id';
+
         return (
-          <span key={idx} className="sea-diff-token-badge">
+          <span key={idx} className={`sea-diff-token-badge ${catClass}`} title={`Vault Token: ${part}`}>
             {part}
           </span>
         );
@@ -547,6 +573,60 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
                   </div>
                 </div>
 
+                {/* Zero-Knowledge Entity Vault (Memory-Only) Inspector */}
+                {stage1Result.entityVault && Object.keys(stage1Result.entityVault).length > 0 && (
+                  <div className="sea-vault-card">
+                    <div
+                      className="sea-vault-header-pill"
+                      onClick={() => setIsVaultOpen((prev) => !prev)}
+                      role="button"
+                      tabIndex={0}
+                      title="Click to collapse / expand Zero-Knowledge Entity Vault"
+                    >
+                      <div className="sea-vault-header-left">
+                        <span className="sea-vault-icon">🔒</span>
+                        <span className="sea-vault-title">Zero-Knowledge Entity Vault (Memory-Only)</span>
+                        <span className="sea-vault-count-badge">
+                          {stage1Result.vaultEntriesCount} tokens isolated
+                        </span>
+                      </div>
+                      <div className="sea-vault-header-right">
+                        <span className="sea-vault-ram-badge">
+                          STORED IN RAM ONLY · 0 BYTES SENT TO CLOUD
+                        </span>
+                        <span className="sea-vault-chevron">{isVaultOpen ? '▲' : '▼'}</span>
+                      </div>
+                    </div>
+
+                    {isVaultOpen && (
+                      <div className="sea-vault-body">
+                        <div className="sea-vault-grid">
+                          {Object.entries(stage1Result.entityVault).map(([token, originalVal]) => {
+                            let catClass = 'token-person';
+                            if (token.startsWith('[ORG_')) catClass = 'token-org';
+                            else if (token.startsWith('[COMPENSATION_')) catClass = 'token-comp';
+                            else if (token.startsWith('[CONTACT_')) catClass = 'token-contact';
+                            else if (token.startsWith('[ID_')) catClass = 'token-id';
+
+                            return (
+                              <div key={token} className="sea-vault-chip">
+                                <span className={`sea-vault-token-badge ${catClass}`}>{token}</span>
+                                <span className="sea-vault-arrow">↔</span>
+                                <span className="sea-vault-original-val" title={originalVal}>
+                                  {originalVal}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="sea-vault-subtext">
+                          <span>🛡 Ephemeral JavaScript RAM state · Instantly purged on page close · Air-Gap strictly prevents transmission to Cloud Gemini or Firestore</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Side-by-Side Air-Gap Diff */}
                 <div className="sea-diff-container">
                   {/* Left Column: Raw Document */}
@@ -587,70 +667,125 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
                 </div>
 
                 {/* Stage 2 Cloud Gemini 2.5 Flash Report */}
-                {stage2Result && (
-                  <div ref={stage2Ref} className="sea-stage2-report-card">
-                    <div className="sea-stage2-header">
-                      <div>
-                        <div className="sea-stage2-kicker">STAGE 2: CLOUD DEEP LEGAL AUDIT</div>
-                        <h3 className="sea-stage2-title">Gemini 2.5 Flash Intelligence</h3>
-                      </div>
-                      <div className="sea-stage2-verdict-pill">
-                        {stage2Result.authenticityVerdict}
-                      </div>
-                    </div>
+                {stage2Result && (() => {
+                  const displaySummary = isRehydrated
+                    ? rehydrateText(stage2Result.executiveSummary, stage1Result?.entityVault)
+                    : stage2Result.executiveSummary;
+                  const displayVerdict = isRehydrated
+                    ? rehydrateText(stage2Result.authenticityVerdict, stage1Result?.entityVault)
+                    : stage2Result.authenticityVerdict;
+                  const displayClauses = stage2Result.clauseBreakdown.map((item) => ({
+                    clause: isRehydrated ? rehydrateText(item.clause, stage1Result?.entityVault) : item.clause,
+                    riskLevel: item.riskLevel,
+                    explanation: isRehydrated ? rehydrateText(item.explanation, stage1Result?.entityVault) : item.explanation,
+                  }));
+                  const displayDraft = isRehydrated
+                    ? rehydrateText(stage2Result.counterOfferEmailDraft, stage1Result?.entityVault)
+                    : stage2Result.counterOfferEmailDraft;
 
-                    <div className="sea-stage2-summary-box">
-                      <strong>Executive Summary:</strong>
-                      <p>{stage2Result.executiveSummary}</p>
-                    </div>
+                  return (
+                    <div ref={stage2Ref} className="sea-stage2-report-card">
+                      <div className="sea-stage2-header">
+                        <div>
+                          <div className="sea-stage2-kicker">STAGE 2: CLOUD DEEP LEGAL AUDIT</div>
+                          <h3 className="sea-stage2-title">Gemini 2.5 Flash Intelligence</h3>
+                        </div>
+                        <div className="sea-stage2-verdict-pill">
+                          {displayVerdict}
+                        </div>
+                      </div>
 
-                    <div className="sea-stage2-clauses-list">
-                      <strong>Clause-by-Clause Risk Breakdown:</strong>
-                      <div className="sea-clauses-grid">
-                        {stage2Result.clauseBreakdown.map((item, idx) => (
-                          <div key={idx} className="sea-clause-card">
-                            <div className="sea-clause-card-header">
-                              <span className="sea-clause-card-title">{item.clause}</span>
-                              <span
-                                className={`sea-card-badge ${
-                                  item.riskLevel === 'CRITICAL'
-                                    ? 'critical'
-                                    : item.riskLevel === 'HIGH' || item.riskLevel === 'MEDIUM'
-                                    ? 'predatory'
-                                    : 'clean'
-                                }`}
-                              >
-                                {item.riskLevel}
-                              </span>
-                            </div>
-                            <p className="sea-clause-card-desc">{item.explanation}</p>
+                      {/* Prominent Local On-Device Re-Hydration Toggle */}
+                      <div className="sea-rehydration-bar">
+                        <div className="sea-rehydration-left">
+                          <div className="sea-rehydration-title">
+                            <span className="sea-rehydrate-icon">{isRehydrated ? '⚡' : '🔒'}</span>
+                            <strong>Re-Hydrate Locally (On-Device)</strong>
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                          <span className="sea-rehydration-caption">
+                            {isRehydrated
+                              ? 'Active: Bracketed tokens ([PERSON_1], [ORG_1], etc.) replaced with real values purely in client state.'
+                              : 'Off: Displaying raw cloud output with sanitized privacy tokens verbatim.'}
+                          </span>
+                        </div>
 
-                    {/* Counter-Offer / Clarification Email Draft */}
-                    <div className="sea-counter-offer-section">
-                      <div className="sea-counter-header">
-                        <strong>Automated Counter-Offer / Clarification Draft:</strong>
-                        <button
-                          type="button"
-                          className="sea-btn-mini"
-                          onClick={() => handleCopyDraft(stage2Result.counterOfferEmailDraft)}
-                        >
-                          {copiedDraft ? 'Copied ✓' : 'Copy Draft'}
-                        </button>
+                        <div className="sea-rehydration-right">
+                          <button
+                            type="button"
+                            className={`sea-rehydrate-toggle-pill ${isRehydrated ? 'active' : ''}`}
+                            onClick={() => setIsRehydrated((prev) => !prev)}
+                            title="Toggle local on-device rehydration"
+                          >
+                            <span className="sea-toggle-track">
+                              <span className="sea-toggle-thumb" />
+                            </span>
+                            <span className="sea-toggle-status-text">
+                              {isRehydrated ? 'RE-HYDRATED (LOCAL)' : 'ANONYMIZED (CLOUD)'}
+                            </span>
+                          </button>
+                        </div>
                       </div>
-                      <textarea
-                        rows={6}
-                        readOnly
-                        className="sea-dark-glass-textarea"
-                        style={{ fontSize: '11px', background: 'rgba(10,14,17,0.85)' }}
-                        value={stage2Result.counterOfferEmailDraft}
-                      />
+
+                      <div className="sea-stage2-summary-box">
+                        <strong>Executive Summary:</strong>
+                        <p>{displaySummary}</p>
+                      </div>
+
+                      <div className="sea-stage2-clauses-list">
+                        <strong>Clause-by-Clause Risk Breakdown:</strong>
+                        <div className="sea-clauses-grid">
+                          {displayClauses.map((item, idx) => (
+                            <div key={idx} className="sea-clause-card">
+                              <div className="sea-clause-card-header">
+                                <span className="sea-clause-card-title">{item.clause}</span>
+                                <span
+                                  className={`sea-card-badge ${
+                                    item.riskLevel === 'CRITICAL'
+                                      ? 'critical'
+                                      : item.riskLevel === 'HIGH' || item.riskLevel === 'MEDIUM'
+                                      ? 'predatory'
+                                      : 'clean'
+                                  }`}
+                                >
+                                  {item.riskLevel}
+                                </span>
+                              </div>
+                              <p className="sea-clause-card-desc">{item.explanation}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Counter-Offer / Clarification Email Draft */}
+                      <div className="sea-counter-offer-section">
+                        <div className="sea-counter-header">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <strong>Automated Counter-Offer / Clarification Draft:</strong>
+                            {isRehydrated && (
+                              <span className="sea-diff-token-badge token-comp" style={{ fontSize: '9px' }}>
+                                Local Substitution Active
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="sea-btn-mini"
+                            onClick={() => handleCopyDraft(displayDraft)}
+                          >
+                            {copiedDraft ? 'Copied ✓' : 'Copy Draft'}
+                          </button>
+                        </div>
+                        <textarea
+                          rows={6}
+                          readOnly
+                          className="sea-dark-glass-textarea"
+                          style={{ fontSize: '11px', background: 'rgba(10,14,17,0.85)' }}
+                          value={displayDraft}
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             )}
           </div>

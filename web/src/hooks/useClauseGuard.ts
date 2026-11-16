@@ -196,10 +196,10 @@ export function useClauseGuard() {
     setIsProcessingStage2(true);
 
     try {
-      const res = await runStage2CloudAudit(stage1Result.redactedText);
+      const res = await runStage2CloudAudit(stage1Result.redactedText, stage1Result.entityVault);
       setStage2Result(res);
 
-      // Persist full anonymized audit telemetry
+      // Persist full anonymized audit telemetry (NEVER persists entityVault)
       persistAnonymizedAudit(stage1Result, res);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

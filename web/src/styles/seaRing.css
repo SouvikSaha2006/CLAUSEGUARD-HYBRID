@@ -2312,13 +2312,202 @@ body::before {
 
 .sea-diff-token-badge {
   display: inline-block;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 4px;
   background: #3AA8D0;
   color: #04121A;
   font-weight: 700;
   font-size: 10px;
   margin: 0 2px;
+}
+
+.sea-diff-token-badge.token-person {
+  background: rgba(58, 168, 208, 0.22);
+  border: 1px solid #3AA8D0;
+  color: #9ED8E4;
+}
+
+.sea-diff-token-badge.token-org {
+  background: rgba(167, 139, 250, 0.22);
+  border: 1px solid #A78BFA;
+  color: #DDD6FE;
+}
+
+.sea-diff-token-badge.token-comp {
+  background: rgba(52, 211, 153, 0.22);
+  border: 1px solid #34D399;
+  color: #A7F3D0;
+}
+
+.sea-diff-token-badge.token-contact {
+  background: rgba(251, 191, 36, 0.22);
+  border: 1px solid #FBBF24;
+  color: #FDE68A;
+}
+
+.sea-diff-token-badge.token-id {
+  background: rgba(248, 113, 113, 0.22);
+  border: 1px solid #F87171;
+  color: #FECACA;
+}
+
+/* Zero-Knowledge Entity Vault (Memory-Only) Card */
+.sea-vault-card {
+  border-radius: 12px;
+  border: 1px solid rgba(58, 168, 208, 0.35);
+  background: rgba(8, 18, 24, 0.85);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+
+.sea-vault-header-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  cursor: pointer;
+  background: rgba(14, 42, 59, 0.45);
+  user-select: none;
+  gap: 12px;
+  flex-wrap: wrap;
+  transition: background 0.2s ease;
+}
+
+.sea-vault-header-pill:hover {
+  background: rgba(14, 42, 59, 0.7);
+}
+
+.sea-vault-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sea-vault-icon {
+  font-size: 13px;
+}
+
+.sea-vault-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.sea-vault-count-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgba(58, 168, 208, 0.2);
+  border: 1px solid var(--clay);
+  color: var(--clay);
+}
+
+.sea-vault-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sea-vault-ram-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(52, 211, 153, 0.15);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #34D399;
+}
+
+.sea-vault-chevron {
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+
+.sea-vault-body {
+  padding: 14px 16px;
+  border-top: 1px solid rgba(158, 216, 228, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sea-vault-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sea-vault-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(14, 24, 32, 0.85);
+  border: 1px solid rgba(158, 216, 228, 0.18);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.sea-vault-token-badge {
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.sea-vault-token-badge.token-person {
+  background: rgba(58, 168, 208, 0.25);
+  border: 1px solid rgba(58, 168, 208, 0.4);
+  color: #9ED8E4;
+}
+.sea-vault-token-badge.token-org {
+  background: rgba(167, 139, 250, 0.25);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  color: #DDD6FE;
+}
+.sea-vault-token-badge.token-comp {
+  background: rgba(52, 211, 153, 0.25);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #A7F3D0;
+}
+.sea-vault-token-badge.token-contact {
+  background: rgba(251, 191, 36, 0.25);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #FDE68A;
+}
+.sea-vault-token-badge.token-id {
+  background: rgba(248, 113, 113, 0.25);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  color: #FECACA;
+}
+
+.sea-vault-arrow {
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.sea-vault-original-val {
+  color: var(--ink);
+  font-weight: 500;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sea-vault-subtext {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-muted);
+  line-height: 1.4;
+  margin-top: 4px;
 }
 
 .sea-red-flags-section {
@@ -2350,6 +2539,110 @@ body::before {
   background: rgba(245, 158, 11, 0.12);
   border: 1px solid rgba(245, 158, 11, 0.3);
   color: #FCD34D;
+}
+
+/* Local On-Device Re-hydration Bar & Toggle */
+.sea-rehydration-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(10, 20, 28, 0.7);
+  border: 1px solid rgba(158, 216, 228, 0.25);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sea-rehydration-left {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sea-rehydration-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.sea-rehydrate-icon {
+  font-size: 13px;
+}
+
+.sea-rehydration-caption {
+  font-size: 11px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.sea-rehydrate-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid rgba(158, 216, 228, 0.35);
+  background: rgba(14, 30, 42, 0.85);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.sea-rehydrate-toggle-pill:hover {
+  border-color: var(--clay);
+  background: rgba(20, 42, 60, 0.95);
+}
+
+.sea-rehydrate-toggle-pill.active {
+  border-color: #34D399;
+  background: rgba(10, 46, 36, 0.85);
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.25);
+}
+
+.sea-toggle-track {
+  width: 34px;
+  height: 18px;
+  border-radius: 9999px;
+  background: rgba(142, 155, 166, 0.3);
+  position: relative;
+  display: inline-block;
+  transition: background 0.2s ease;
+}
+
+.sea-rehydrate-toggle-pill.active .sea-toggle-track {
+  background: #34D399;
+}
+
+.sea-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.sea-rehydrate-toggle-pill.active .sea-toggle-thumb {
+  transform: translateX(16px);
+}
+
+.sea-toggle-status-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+
+.sea-rehydrate-toggle-pill.active .sea-toggle-status-text {
+  color: #6EE7B7;
 }
 
 /* Stage 2 Report Card */
