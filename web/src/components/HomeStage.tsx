@@ -11,6 +11,7 @@ interface HomeStageProps {
   nanoLatency: number | null;
   onNavigateToLab: () => void;
   onCardSelect: (card: RingCardData) => void;
+  children?: React.ReactNode;
 }
 
 interface ChoiceMeta {
@@ -63,6 +64,7 @@ export const HomeStage: React.FC<HomeStageProps> = ({
   nanoLatency,
   onNavigateToLab,
   onCardSelect,
+  children,
 }) => {
   // Active hovered choice
   const [hoveredChoice, setHoveredChoice] = useState<ChoiceMeta | null>(null);
@@ -158,37 +160,43 @@ export const HomeStage: React.FC<HomeStageProps> = ({
   // Line 1: "I audit contracts for " + Choice 01 startups + ","
   // Line 2: "offer letters for " + Choice 02 candidates + " and privacy traps"
   // Line 3: "for " + Choice 03 freelancers + ". Or just " + Choice 04 ask ClauseGuard + "."
-  const sentenceLines = [
+  const sentenceLines: {
+    tokens: Array<{
+      text?: string;
+      choice?: ChoiceMeta;
+      isPunctuation?: boolean;
+    }>;
+  }[] = [
     {
       tokens: [
-        { text: 'I ' },
-        { text: 'audit ' },
-        { text: 'contracts ' },
-        { text: 'for ' },
+        { text: 'I' },
+        { text: 'audit' },
+        { text: 'contracts' },
+        { text: 'for' },
         { choice: CHOICES[0] },
-        { text: ',' },
+        { text: ',', isPunctuation: true },
       ],
     },
     {
       tokens: [
-        { text: 'offer ' },
-        { text: 'letters ' },
-        { text: 'for ' },
+        { text: 'offer' },
+        { text: 'letters' },
+        { text: 'for' },
         { choice: CHOICES[1] },
-        { text: ' and ' },
-        { text: 'privacy ' },
+        { text: 'and' },
+        { text: 'privacy' },
         { text: 'traps' },
       ],
     },
     {
       tokens: [
-        { text: 'for ' },
+        { text: 'for' },
         { choice: CHOICES[2] },
-        { text: '. ' },
-        { text: 'Or ' },
-        { text: 'just ' },
+        { text: '.', isPunctuation: true },
+        { text: 'Or' },
+        { text: 'just' },
         { choice: CHOICES[3] },
-        { text: '.' },
+        { text: '.', isPunctuation: true },
       ],
     },
   ];
@@ -209,6 +217,7 @@ export const HomeStage: React.FC<HomeStageProps> = ({
                 const wordIndex = cumulativeWordIndex++;
                 // Rise delay stagger: 0.05s + 0.035s * index
                 const staggerDelay = 0.05 + 0.035 * wordIndex;
+                const isLastInLine = tokIdx === line.tokens.length - 1;
 
                 if (token.choice) {
                   const ch = token.choice;
@@ -216,10 +225,72 @@ export const HomeStage: React.FC<HomeStageProps> = ({
                   const isDimmed = hoveredChoice !== null && !isHovered;
 
                   return (
+                    <React.Fragment key={tokIdx}>
+                      <span
+                        className="sea-word-mask"
+                        style={{
+                          overflow: 'hidden',
+                          display: 'inline-block',
+                          verticalAlign: 'bottom',
+                          marginRight: '0.28em',
+                        }}
+                      >
+                        <span
+                          className="sea-word-rising"
+                          style={{
+                            display: 'inline-block',
+                            transform: wordsRisen ? 'translateY(0%)' : 'translateY(105%)',
+                            transition: `transform 0.8s var(--ease) ${staggerDelay}s, opacity 0.4s ease`,
+                            opacity: isDimmed ? 0.28 : 1,
+                          }}
+                        >
+                          <span
+                            className="sea-choice-interactive"
+                            onPointerEnter={() => setHoveredChoice(ch)}
+                            onPointerLeave={() => setHoveredChoice(null)}
+                            onClick={onNavigateToLab}
+                          >
+                            <span
+                              className="sea-choice-marker"
+                              style={{
+                                backgroundColor: ch.color,
+                                transform: isHovered ? 'scaleX(1)' : 'scaleX(0)',
+                                transition: 'transform .5s var(--ease)',
+                                transformOrigin: 'left',
+                              }}
+                            />
+                            <span
+                              className="sea-choice-text"
+                              style={{
+                                color: isHovered ? ch.onText : 'var(--ink)',
+                                transition: 'color 0.3s ease',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {ch.word}
+                            </span>
+                          </span>
+                        </span>
+                      </span>
+                      {" "}
+                    </React.Fragment>
+                  );
+                }
+
+                // Regular word or punctuation
+                const isDimmed = hoveredChoice !== null;
+                const isPunct = token.isPunctuation;
+                return (
+                  <React.Fragment key={tokIdx}>
                     <span
-                      key={tokIdx}
-                      className="sea-word-mask"
-                      style={{ overflow: 'hidden', display: 'inline-block', verticalAlign: 'bottom' }}
+                      className={`sea-word-mask ${isPunct ? 'sea-punct-mask' : ''}`}
+                      style={{
+                        overflow: 'hidden',
+                        display: 'inline-block',
+                        verticalAlign: 'bottom',
+                        marginRight: isPunct && isLastInLine ? 0 : '0.28em',
+                        marginLeft: isPunct ? '-0.28em' : undefined,
+                      }}
                     >
                       <span
                         className="sea-word-rising"
@@ -230,57 +301,11 @@ export const HomeStage: React.FC<HomeStageProps> = ({
                           opacity: isDimmed ? 0.28 : 1,
                         }}
                       >
-                        <span
-                          className="sea-choice-interactive"
-                          onPointerEnter={() => setHoveredChoice(ch)}
-                          onPointerLeave={() => setHoveredChoice(null)}
-                          onClick={onNavigateToLab}
-                        >
-                          <span
-                            className="sea-choice-marker"
-                            style={{
-                              backgroundColor: ch.color,
-                              transform: isHovered ? 'scaleX(1)' : 'scaleX(0)',
-                              transition: 'transform .5s var(--ease)',
-                              transformOrigin: 'left',
-                            }}
-                          />
-                          <span
-                            className="sea-choice-text"
-                            style={{
-                              color: isHovered ? ch.onText : 'var(--ink)',
-                              transition: 'color 0.3s ease',
-                              fontWeight: 500,
-                            }}
-                          >
-                            {ch.word}
-                          </span>
-                        </span>
+                        {token.text}
                       </span>
                     </span>
-                  );
-                }
-
-                // Regular word
-                const isDimmed = hoveredChoice !== null;
-                return (
-                  <span
-                    key={tokIdx}
-                    className="sea-word-mask"
-                    style={{ overflow: 'hidden', display: 'inline-block', verticalAlign: 'bottom' }}
-                  >
-                    <span
-                      className="sea-word-rising"
-                      style={{
-                        display: 'inline-block',
-                        transform: wordsRisen ? 'translateY(0%)' : 'translateY(105%)',
-                        transition: `transform 0.8s var(--ease) ${staggerDelay}s, opacity 0.4s ease`,
-                        opacity: isDimmed ? 0.28 : 1,
-                      }}
-                    >
-                      {token.text}
-                    </span>
-                  </span>
+                    {!isPunct && !isLastInLine ? " " : null}
+                  </React.Fragment>
                 );
               })}
             </div>
@@ -399,13 +424,18 @@ export const HomeStage: React.FC<HomeStageProps> = ({
       )}
 
       {/* ===================================================================
-          3. 3D CYLINDRICAL RING OF 16 CARDS
+          2. ROUNDED WORLD FRAME (margin: 0 16u 22u; border-radius: 22u)
           =================================================================== */}
-      <SeaRing3D
-        isRevealed={isRevealed}
-        highlightWorld={hoveredChoice?.world ?? null}
-        onCardSelect={onCardSelect}
-      />
+      <div className={`sea-world-frame ${isRevealed ? 'revealed' : ''}`}>
+        <div className="sea-frame-inner">
+          {children}
+          <SeaRing3D
+            isRevealed={isRevealed}
+            highlightWorld={hoveredChoice?.world ?? null}
+            onCardSelect={onCardSelect}
+          />
+        </div>
+      </div>
     </div>
   );
 };

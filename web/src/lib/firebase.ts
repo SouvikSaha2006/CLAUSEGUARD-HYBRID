@@ -3,7 +3,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { initializeAppCheck, ReCaptchaV3Provider, type AppCheck } from 'firebase/app-check';
 import { getAuth, signInAnonymously, onAuthStateChanged, type User } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 import {
   getRemoteConfig,
   fetchAndActivate,
@@ -59,7 +59,7 @@ signInAnonymously(auth).catch((err) => {
 });
 
 // 5. Firestore Database
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, { experimentalForceLongPolling: true });
 
 // 6. Firebase Remote Config
 export const remoteConfig: RemoteConfig = getRemoteConfig(app);

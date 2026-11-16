@@ -17,8 +17,9 @@ export const SeaRing3D: React.FC<SeaRing3DProps> = ({
   highlightWorld,
   onCardSelect,
 }) => {
-  // Expansion e (0..1) over 1.9s cubic-bezier(.5,0,.15,1)
-  const [eExpansion, setEExpansion] = useState<number>(0);
+  // Expansion & Formation (0..1) over 1.9s cubic-bezier(.5,0,.15,1), settling at 1
+  const [expansion, setExpansion] = useState<number>(() => (isRevealed ? 1 : 0));
+  const [formation, setFormation] = useState<number>(() => (isRevealed ? 1 : 0));
 
   // Rotation spring state
   const ringRotRef = useRef<number>(0);
@@ -37,7 +38,7 @@ export const SeaRing3D: React.FC<SeaRing3DProps> = ({
   const hasMovedPastThresholdRef = useRef<boolean>(false);
   const dragEndTimeRef = useRef<number>(0);
 
-  // 1. Expansion Animation on Reveal
+  // 1. Expansion & Formation Animation on Reveal (or settles at 1 when skipped)
   useEffect(() => {
     if (!isRevealed) return;
 
@@ -54,10 +55,14 @@ export const SeaRing3D: React.FC<SeaRing3DProps> = ({
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / duration);
       const eased = bezierProgress(progress);
-      setEExpansion(eased);
+      setExpansion(eased);
+      setFormation(eased);
 
       if (progress < 1) {
         animId = requestAnimationFrame(expandStep);
+      } else {
+        setExpansion(1);
+        setFormation(1);
       }
     };
 
@@ -65,15 +70,16 @@ export const SeaRing3D: React.FC<SeaRing3DProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [isRevealed]);
 
-  // 2. Exact Mathematical Formulas from the Specification:
-  // e: 0 -> 1
+  // 2. Mathematical Formulas:
+  // e: 0 -> 1, f: 0 -> 1
   // tilt = -22 * (1 - e)
   // radius = 460 + 1340 * e
   // anchor = -radius * sin(tilt) + 460 * sin(-22deg) * (1 - e)
   // perspective = 1000 + (760 - 1000) * e
   // roll = -20 * (1 - e)
   // cardScale = 0.52 + (2.3 - 0.52) * e^2
-  const e = eExpansion;
+  const e = expansion;
+  const f = formation;
   const tiltDeg = -22 * (1 - e);
   const tiltRad = (tiltDeg * Math.PI) / 180;
   const radius = 460 + 1340 * e;
@@ -227,18 +233,18 @@ export const SeaRing3D: React.FC<SeaRing3DProps> = ({
           const r = ((currentCardAngle % 360) + 540) % 360 - 180;
           const rRad = (r * Math.PI) / 180;
 
-          // Spatial 3D coordinates
+          // Spatial 3D coordinates: visible horizontal arc across the sunlit sea panel
           const x = radius * Math.sin(rRad);
-          const z = radius * Math.cos(rRad);
+          const z = radius * (Math.cos(rRad) - 1) * f;
 
-          // 1. Behind camera cull: z * cos(tilt) >= perspective - 70
+          // 1. Behind camera cull: ensures cards stay in front of camera
           const isBehindCamera = z * Math.cos(tiltRad) >= perspective - 70;
           if (isBehindCamera) {
             return null;
           }
 
-          // 2. Backface check: z > radius^2 / perspective
-          const isBackface = z > (radius * radius) / perspective;
+          // 2. Backface check: cards rotated to the back of the cylinder
+          const isBackface = Math.cos(rRad) < 0;
 
           // 3. |r| > 96 deg cull after intro expansion e > 0.8
           if (e > 0.8 && Math.abs(r) > 96) {

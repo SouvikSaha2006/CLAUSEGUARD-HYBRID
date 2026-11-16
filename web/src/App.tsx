@@ -449,7 +449,20 @@ export function App() {
         {/* Right Links & Firebase Live Status Pill */}
         <div className="sea-nav-right">
           {/* Subtle live Firebase AI Logic status pill */}
-          <div className="sea-nav-status-pill" title="Firebase AI Logic On-Device & Remote Config Status">
+          <div
+            className="sea-nav-status-pill"
+            title="Click to check/refresh Gemini Nano on-device status"
+            onClick={refreshNanoStatus}
+            style={{ cursor: 'pointer' }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                refreshNanoStatus();
+              }
+            }}
+          >
             <span
               className={`sea-status-indicator ${
                 nanoStatus === 'ready'
@@ -459,7 +472,7 @@ export function App() {
                   : 'unavailable'
               }`}
             />
-            <span>NANO: {nanoStatus}</span>
+            <span>NANO: {nanoStatus.toUpperCase()}</span>
             <span className="sea-nav-sep">/</span>
             <span>MODE: {remoteConfigValues.routing_mode}</span>
           </div>
@@ -550,134 +563,129 @@ export function App() {
         id="view-home"
         style={{ display: currentView === 'home' ? 'block' : 'none' }}
       >
-        <div className={`sea-world-frame ${introState !== 'running' ? 'revealed' : ''}`}>
-          <div className="sea-frame-inner">
-            {/* Scene Image & Loop Video */}
-            <div
-              className={`sea-scene-layer ${introState !== 'running' ? 'visible' : ''}`}
-              style={{
-                transform: `translate3d(${parallaxOffset.sceneX}px, ${parallaxOffset.sceneY}px, 0)`,
-              }}
-            >
-              <img
-                src={SEA_STILL_URL}
-                alt="Sunlit Sea Stage"
-                className="sea-scene-media"
-              />
-              <video
-                ref={videoHomeRef}
-                src={SEA_LOOP_VIDEO_URL}
-                className={`sea-scene-media sea-scene-video ${videoPlaying ? 'playing' : ''}`}
-                muted
-                loop
-                playsInline
-                autoPlay
-                onPlaying={() => setVideoPlaying(true)}
-              />
-            </div>
-
-            {/* Jittering Grain Layer */}
-            {!reducedMotion && <div className="sea-grain-layer" />}
-
-            {/* 12 Back Petals */}
-            {!reducedMotion && (
-              <div
-                className="sea-petals-back-layer"
-                style={{
-                  transform: `translate3d(${parallaxOffset.backPetalsX}px, ${parallaxOffset.backPetalsY}px, 0)`,
-                }}
-              >
-                {BACK_PETALS.map((petal) => (
-                  <div
-                    key={petal.id}
-                    className="sea-petal"
-                    style={{
-                      top: petal.top,
-                      left: petal.left,
-                      width: petal.width,
-                      height: petal.height,
-                      opacity: petal.opacity,
-                      animation: `${petal.animationName} ${petal.duration} ease-in-out infinite alternate`,
-                      animationDelay: petal.delay,
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Bottom White Mist Layer (height: 46%) */}
-            <div
-              className={`sea-mist-layer ${introState !== 'running' ? 'risen' : ''}`}
-              style={{
-                transform: `translate3d(${parallaxOffset.mistX}px, ${parallaxOffset.mistY}px, 0)`,
-              }}
+        <HomeStage
+          isRevealed={introState !== 'running'}
+          historyCount={history.length}
+          nanoLatency={stage1Result?.latencyMs ?? null}
+          onNavigateToLab={() => {
+            window.location.hash = '#build';
+            setCurrentView('build');
+          }}
+          onCardSelect={handleSelectSlotCard}
+        >
+          {/* Scene Image & Loop Video */}
+          <div
+            className={`sea-scene-layer ${introState !== 'running' ? 'visible' : ''}`}
+            style={{
+              transform: `translate3d(${parallaxOffset.sceneX}px, ${parallaxOffset.sceneY}px, 0)`,
+            }}
+          >
+            <img
+              src={SEA_STILL_URL}
+              alt="Sunlit Sea Stage"
+              className="sea-scene-media"
             />
-
-            {/* 5 Front Petals (z: 3) */}
-            {!reducedMotion && (
-              <div
-                className="sea-petals-front-layer"
-                style={{
-                  transform: `translate3d(${parallaxOffset.frontPetalsX}px, ${parallaxOffset.frontPetalsY}px, 0)`,
-                }}
-              >
-                {FRONT_PETALS.map((petal) => (
-                  <div
-                    key={petal.id}
-                    className="sea-petal"
-                    style={{
-                      top: petal.top,
-                      left: petal.left,
-                      width: petal.width,
-                      height: petal.height,
-                      opacity: petal.opacity,
-                      filter: 'drop-shadow(0 0 6px rgba(158, 216, 228, 0.4))',
-                      animation: `${petal.animationName} ${petal.duration} ease-in-out infinite alternate`,
-                      animationDelay: petal.delay,
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* 14 Glowing Motes (z: 4) */}
-            {!reducedMotion && (
-              <div
-                className="sea-motes-layer"
-                style={{
-                  transform: `translate3d(${parallaxOffset.motesX}px, ${parallaxOffset.motesY}px, 0)`,
-                }}
-              >
-                {GLOWING_MOTES.map((mote) => (
-                  <div
-                    key={mote.id}
-                    className="sea-mote"
-                    style={{
-                      top: mote.top,
-                      left: mote.left,
-                      width: `${mote.size}px`,
-                      height: `${mote.size}px`,
-                      animation: `motePulse ${mote.duration} ease-in-out infinite`,
-                      animationDelay: mote.delay,
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Section 6 Home Stage (Top Row Editorial Headline, Live Stats, Pointer Preview & 3D Cylindrical Ring of 16 Cards) */}
-            <HomeStage
-              isRevealed={introState !== 'running'}
-              historyCount={history.length}
-              nanoLatency={stage1Result?.latencyMs ?? null}
-              onNavigateToLab={() => {
-                window.location.hash = '#build';
-                setCurrentView('build');
-              }}
-              onCardSelect={handleSelectSlotCard}
+            <video
+              ref={videoHomeRef}
+              src={SEA_LOOP_VIDEO_URL}
+              className={`sea-scene-media sea-scene-video ${videoPlaying ? 'playing' : ''}`}
+              muted
+              loop
+              playsInline
+              autoPlay
+              onPlaying={() => setVideoPlaying(true)}
             />
           </div>
-        </div>
+
+          {/* Jittering Grain Layer */}
+          {!reducedMotion && <div className="sea-grain-layer" />}
+
+          {/* 12 Back Petals */}
+          {!reducedMotion && (
+            <div
+              className="sea-petals-back-layer"
+              style={{
+                transform: `translate3d(${parallaxOffset.backPetalsX}px, ${parallaxOffset.backPetalsY}px, 0)`,
+              }}
+            >
+              {BACK_PETALS.map((petal) => (
+                <div
+                  key={petal.id}
+                  className="sea-petal"
+                  style={{
+                    top: petal.top,
+                    left: petal.left,
+                    width: petal.width,
+                    height: petal.height,
+                    opacity: petal.opacity,
+                    animation: `${petal.animationName} ${petal.duration} ease-in-out infinite alternate`,
+                    animationDelay: petal.delay,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Bottom White Mist Layer (height: 46%) */}
+          <div
+            className={`sea-mist-layer ${introState !== 'running' ? 'risen' : ''}`}
+            style={{
+              transform: `translate3d(${parallaxOffset.mistX}px, ${parallaxOffset.mistY}px, 0)`,
+            }}
+          />
+
+          {/* 5 Front Petals (z: 3) */}
+          {!reducedMotion && (
+            <div
+              className="sea-petals-front-layer"
+              style={{
+                transform: `translate3d(${parallaxOffset.frontPetalsX}px, ${parallaxOffset.frontPetalsY}px, 0)`,
+              }}
+            >
+              {FRONT_PETALS.map((petal) => (
+                <div
+                  key={petal.id}
+                  className="sea-petal"
+                  style={{
+                    top: petal.top,
+                    left: petal.left,
+                    width: petal.width,
+                    height: petal.height,
+                    opacity: petal.opacity,
+                    filter: 'drop-shadow(0 0 6px rgba(158, 216, 228, 0.4))',
+                    animation: `${petal.animationName} ${petal.duration} ease-in-out infinite alternate`,
+                    animationDelay: petal.delay,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* 14 Glowing Motes (z: 4) */}
+          {!reducedMotion && (
+            <div
+              className="sea-motes-layer"
+              style={{
+                transform: `translate3d(${parallaxOffset.motesX}px, ${parallaxOffset.motesY}px, 0)`,
+              }}
+            >
+              {GLOWING_MOTES.map((mote) => (
+                <div
+                  key={mote.id}
+                  className="sea-mote"
+                  style={{
+                    top: mote.top,
+                    left: mote.left,
+                    width: `${mote.size}px`,
+                    height: `${mote.size}px`,
+                    animation: `motePulse ${mote.duration} ease-in-out infinite`,
+                    animationDelay: mote.delay,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </HomeStage>
       </div>
 
       {/* =====================================================================

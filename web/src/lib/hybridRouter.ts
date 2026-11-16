@@ -41,43 +41,56 @@ export async function checkOnDeviceStatus(): Promise<OnDeviceStatus> {
   }
 
   try {
-    const win = window as unknown as {
-      ai?: {
-        languageModel?: {
-          capabilities?: () => Promise<{ available: string }>;
-          availability?: () => Promise<string>;
-        };
-      };
-      LanguageModel?: {
-        capabilities?: () => Promise<{ available: string }>;
-        availability?: () => Promise<string>;
-      };
-    };
+    const win = window as any;
 
-    const promptApi = win.LanguageModel || win.ai?.languageModel;
-    if (!promptApi) {
-      return 'unavailable';
+    let rawStatus: string | undefined;
+
+    // 1. Check (window as any).LanguageModel?.availability()
+    if (typeof win.LanguageModel?.availability === 'function') {
+      try {
+        rawStatus = await win.LanguageModel.availability();
+      } catch (err) {
+        console.warn('[ClauseGuard] win.LanguageModel.availability() note:', err);
+      }
     }
 
-    if (typeof promptApi.capabilities === 'function') {
-      const caps = await promptApi.capabilities();
-      if (caps?.available === 'readily' || caps?.available === 'ready') {
+    // 2. Check (window as any).ai?.languageModel?.availability()
+    if (!rawStatus && typeof win.ai?.languageModel?.availability === 'function') {
+      try {
+        rawStatus = await win.ai.languageModel.availability();
+      } catch (err) {
+        console.warn('[ClauseGuard] win.ai.languageModel.availability() note:', err);
+      }
+    }
+
+    // 3. Fallback: (window as any).ai?.languageModel?.capabilities() or LanguageModel?.capabilities()
+    if (!rawStatus) {
+      const promptApi = win.LanguageModel || win.ai?.languageModel;
+      if (promptApi && typeof promptApi.capabilities === 'function') {
+        try {
+          const caps = await promptApi.capabilities();
+          rawStatus = caps?.available;
+        } catch (err) {
+          console.warn('[ClauseGuard] promptApi.capabilities() note:', err);
+        }
+      }
+    }
+
+    if (rawStatus) {
+      const normalized = String(rawStatus).toLowerCase().trim();
+      if (normalized === 'available' || normalized === 'readily' || normalized === 'ready') {
         return 'ready';
       }
-      if (caps?.available === 'after-download') {
+      if (
+        normalized === 'downloading' ||
+        normalized === 'downloadable' ||
+        normalized === 'after-download'
+      ) {
         return 'downloading';
       }
-      return 'unavailable';
     }
 
-    if (typeof promptApi.availability === 'function') {
-      const status = await promptApi.availability();
-      if (status === 'readily' || status === 'ready') return 'ready';
-      if (status === 'after-download') return 'downloading';
-      return 'unavailable';
-    }
-
-    return 'ready';
+    return 'unavailable';
   } catch (err) {
     console.warn('[ClauseGuard] checkOnDeviceStatus warning:', err);
     return 'unavailable';

@@ -104,6 +104,15 @@ export function useClauseGuard() {
     refreshNanoStatus();
     refreshRemoteConfig();
     loadHistory();
+
+    const handleFocus = () => {
+      refreshNanoStatus();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [refreshNanoStatus, refreshRemoteConfig, loadHistory]);
 
   // 3. Persist anonymized scan metadata to Firestore (Zero PII guarantee)
