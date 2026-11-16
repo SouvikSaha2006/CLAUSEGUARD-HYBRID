@@ -4,187 +4,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useClauseGuard } from './hooks/useClauseGuard';
 import { PRESET_CONTRACTS } from './data/presets';
+import { HomeStage } from './components/HomeStage';
+import { RING_16_CARDS, type RingCardData } from './data/ringCards';
 import './styles/seaRing.css';
-
-// 16 Threat & Guardrail Ring Cards with dedicated poster images
-export interface RingCard {
-  id: string;
-  presetId?: string;
-  index: string;
-  title: string;
-  badge: string;
-  badgeType: 'critical' | 'predatory' | 'clean';
-  riskScore: number;
-  description: string;
-  posterUrl: string;
-  sampleText?: string;
-}
-
-const RING_CARDS: RingCard[] = [
-  {
-    id: 'card-1',
-    presetId: 'fake-remote-tech-scam',
-    index: 'THREAT #01',
-    title: 'Advance-Fee Hardware Scam',
-    badge: 'Critical Scam Alert',
-    badgeType: 'critical',
-    riskScore: 95,
-    description: 'Counterfeit cashier check scam with urgent wire/Zelle transfer demands to a fictitious approved hardware vendor.',
-    posterUrl: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-2',
-    presetId: 'predatory-non-compete-ip-trap',
-    index: 'THREAT #02',
-    title: '24-Month Worldwide Non-Compete',
-    badge: 'Predatory Terms',
-    badgeType: 'predatory',
-    riskScore: 82,
-    description: 'Draconian two-year worldwide employment restraint combined with an all-encompassing moonlighting IP grab.',
-    posterUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-3',
-    presetId: 'clean-standard-offer',
-    index: 'STANDARD #03',
-    title: 'Clean Engineering Offer',
-    badge: 'Clean / Safe',
-    badgeType: 'clean',
-    riskScore: 12,
-    description: 'Fair employment terms with balanced IP protection, no non-compete, and direct corporate equipment shipping.',
-    posterUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-4',
-    index: 'THREAT #04',
-    title: 'Liquidated Damages Gag ($250k)',
-    badge: 'Predatory Terms',
-    badgeType: 'predatory',
-    riskScore: 88,
-    description: 'Unilateral $250,000 liquidated damages clause combined with immediate attorney fee shifting on any perceived breach.',
-    posterUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-5',
-    index: 'THREAT #05',
-    title: 'Universal Moonlight IP Expropriation',
-    badge: 'Predatory Terms',
-    badgeType: 'predatory',
-    riskScore: 91,
-    description: 'Expropriates all personal open-source projects, weekend creations, and prior inventions throughout the universe in perpetuity.',
-    posterUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-6',
-    index: 'THREAT #06',
-    title: 'Telegram Messenger Interview Trap',
-    badge: 'Critical Scam Alert',
-    badgeType: 'critical',
-    riskScore: 98,
-    description: 'Unverified Telegram questionnaire interview with waived technical steps and spoofed domain correspondence.',
-    posterUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-7',
-    index: 'THREAT #07',
-    title: 'Mandatory Binding Arbitration Waiver',
-    badge: 'Predatory Terms',
-    badgeType: 'predatory',
-    riskScore: 74,
-    description: 'Complete waiver of jury trial, class-action remedies, and appeal rights, forced into employer-selected private forum.',
-    posterUrl: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-8',
-    index: 'THREAT #08',
-    title: 'Uncapped Third-Party Indemnification',
-    badge: 'Predatory Terms',
-    badgeType: 'predatory',
-    riskScore: 85,
-    description: 'Forces candidate to unconditionally indemnify company against any third-party claims or operational liabilities.',
-    posterUrl: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-9',
-    index: 'THREAT #09',
-    title: 'Offshore Crypto Remittance Scheme',
-    badge: 'Critical Scam Alert',
-    badgeType: 'critical',
-    riskScore: 94,
-    description: 'Requires candidate to receive USDT/Bitcoin for secondary domestic forwarding, exposing applicant to money laundering liability.',
-    posterUrl: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-10',
-    index: 'THREAT #10',
-    title: 'Cliff Equity Forfeiture Clawback',
-    badge: 'Predatory Terms',
-    badgeType: 'predatory',
-    riskScore: 78,
-    description: 'Unilateral equity cancellation upon termination without cause, revoking all vested and accrued stock grants.',
-    posterUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-11',
-    index: 'GUARDRAIL #11',
-    title: 'Gemini Nano On-Device Redaction',
-    badge: 'Air-Gap Shield',
-    badgeType: 'clean',
-    riskScore: 4,
-    description: 'Strict client-side air-gap sanitization of candidate names, SSNs, compensation, addresses, and contacts in zero network ms.',
-    posterUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-12',
-    index: 'GUARDRAIL #12',
-    title: 'Firebase AI Logic Hybrid Router',
-    badge: 'Dual-Stage Core',
-    badgeType: 'clean',
-    riskScore: 5,
-    description: 'Seamlessly orchestrates on-device inference with cloud Gemini 2.5 Flash escalation while enforcing zero PII leakage.',
-    posterUrl: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-13',
-    index: 'GUARDRAIL #13',
-    title: 'Firebase App Check Attestation',
-    badge: 'Zero-Trust Auth',
-    badgeType: 'clean',
-    riskScore: 3,
-    description: 'ReCAPTCHA v3 cryptographic app verification shielding all backend endpoints from automated replay and abuse.',
-    posterUrl: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-14',
-    index: 'GUARDRAIL #14',
-    title: 'Remote Config Realtime Throttling',
-    badge: 'Dynamic Threshold',
-    badgeType: 'clean',
-    riskScore: 6,
-    description: 'Dynamically shifts escalation score thresholds and routing modes across millions of clients in real time without redeploying.',
-    posterUrl: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-15',
-    index: 'GUARDRAIL #15',
-    title: '100% In-Browser PDF Vector Parser',
-    badge: 'Sandbox Extractor',
-    badgeType: 'clean',
-    riskScore: 2,
-    description: 'Client-side vector stream extraction of contract PDF files directly in browser memory with zero bytes dispatched.',
-    posterUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    id: 'card-16',
-    index: 'GUARDRAIL #16',
-    title: 'Automated Counter-Offer Synthesizer',
-    badge: 'Legal Shield',
-    badgeType: 'clean',
-    riskScore: 7,
-    description: 'Generates professional, diplomatic counter-offers proposing reasonable 6-month non-competes and moonlighting carve-outs.',
-    posterUrl: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=600&q=80',
-  },
-];
 
 // 12 Back Petals configuration
 interface PetalConfig {
@@ -254,7 +76,7 @@ const SEA_STILL_URL =
   'https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20261111_224417_17e8d78c-9384-4a50-93b4-92510f1957db.png&w=2048&q=85';
 
 const SEA_LOOP_VIDEO_URL =
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20261111_232613_bf108dd9-dc98-4729-9163-748475f20b61.mp4';
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20261111_232613_bf108dd9-dc98-4729-9163-748475f20b61.mp4';
 
 export function App() {
   const {
@@ -281,7 +103,7 @@ export function App() {
     return window.location.hash === '#build' ? 'build' : 'home';
   });
 
-  // Opening Sequence State ('idle' | 'running' | 'revealing' | 'completed')
+  // Opening Sequence State ('running' | 'revealing' | 'completed')
   const [introState, setIntroState] = useState<'running' | 'revealing' | 'completed'>(() => {
     if (typeof window !== 'undefined') {
       if (window.location.hash === '#build') return 'completed';
@@ -312,13 +134,6 @@ export function App() {
 
   // Copy status feedback for counter-offer draft
   const [copiedDraft, setCopiedDraft] = useState(false);
-
-  // 3D Ring carousel state
-  const [ringRotation, setRingRotation] = useState<number>(0);
-  const [isDraggingRing, setIsDraggingRing] = useState<boolean>(false);
-  const ringDragStartX = useRef<number>(0);
-  const ringStartRot = useRef<number>(0);
-  const ringVelocity = useRef<number>(0);
 
   // Spring Parallax State (pointer coordinates & spring simulation)
   const [parallaxOffset, setParallaxOffset] = useState({
@@ -416,10 +231,10 @@ export function App() {
     if (introState !== 'running') return;
 
     let loadedCount = 0;
-    const totalAssets = RING_CARDS.length;
+    const totalAssets = RING_16_CARDS.length;
 
     // Preload each card image
-    RING_CARDS.forEach((card) => {
+    RING_16_CARDS.forEach((card) => {
       const img = new Image();
       img.onload = img.onerror = () => {
         loadedCount += 1;
@@ -573,51 +388,12 @@ export function App() {
     };
   }, []);
 
-  // 9. 3D Ring drag and momentum loop
-  useEffect(() => {
-    let animId: number;
-    const momentumLoop = () => {
-      if (!isDraggingRing) {
-        if (Math.abs(ringVelocity.current) > 0.01) {
-          setRingRotation((prev) => prev + ringVelocity.current);
-          ringVelocity.current *= 0.94; // friction
-        } else {
-          // Subtle idle ambient spin
-          setRingRotation((prev) => prev - 0.035);
-        }
-      }
-      animId = requestAnimationFrame(momentumLoop);
-    };
-
-    animId = requestAnimationFrame(momentumLoop);
-    return () => cancelAnimationFrame(animId);
-  }, [isDraggingRing]);
-
-  const handleRingPointerDown = (e: React.PointerEvent) => {
-    setIsDraggingRing(true);
-    ringDragStartX.current = e.clientX;
-    ringStartRot.current = ringRotation;
-    ringVelocity.current = 0;
-  };
-
-  const handleRingPointerMove = (e: React.PointerEvent) => {
-    if (!isDraggingRing) return;
-    const delta = e.clientX - ringDragStartX.current;
-    const newRot = ringStartRot.current + delta * 0.28;
-    ringVelocity.current = delta * 0.04;
-    setRingRotation(newRot);
-  };
-
-  const handleRingPointerUp = () => {
-    setIsDraggingRing(false);
-  };
-
   // Card select -> Load into Audit Lab & Switch View
-  const handleSelectCard = (card: RingCard) => {
+  const handleSelectSlotCard = (card: RingCardData) => {
     if (card.presetId) {
       loadPreset(card.presetId);
-    } else if (card.sampleText) {
-      setRawContractText(card.sampleText);
+    } else if (card.sampleContract) {
+      setRawContractText(card.sampleContract);
     }
     window.location.hash = '#build';
     setCurrentView('build');
@@ -768,7 +544,7 @@ export function App() {
       )}
 
       {/* =====================================================================
-          3. VIEW: HOME (#view-home) - 3D SEA RING EXPERIENCE
+          3. VIEW: HOME (#view-home) - SECTION 6 EDITORIAL TOP ROW & 3D SEA RING
           ===================================================================== */}
       <div
         id="view-home"
@@ -827,59 +603,6 @@ export function App() {
               ))}
             </div>
 
-            {/* 3D Ring Container (z: 2) */}
-            <div
-              className="sea-ring-stage"
-              onPointerDown={handleRingPointerDown}
-              onPointerMove={handleRingPointerMove}
-              onPointerUp={handleRingPointerUp}
-              onPointerCancel={handleRingPointerUp}
-            >
-              <div
-                className="sea-ring-carousel"
-                style={{
-                  transform: `rotateY(${ringRotation}deg)`,
-                }}
-              >
-                {RING_CARDS.map((card, i) => {
-                  const angle = (360 / RING_CARDS.length) * i;
-                  const radius = 700; // cylinder radius in px
-
-                  return (
-                    <div
-                      key={card.id}
-                      className="sea-ring-card"
-                      style={{
-                        transform: `rotateY(${angle}deg) translateZ(${radius}px)`,
-                      }}
-                      onClick={() => handleSelectCard(card)}
-                    >
-                      <div className="sea-card-header">
-                        <span className={`sea-card-badge ${card.badgeType}`}>
-                          {card.badge}
-                        </span>
-                        <span className="sea-card-risk-pill">
-                          RISK {card.riskScore}
-                        </span>
-                      </div>
-
-                      <div className="sea-card-body">
-                        <div className="sea-card-index">{card.index}</div>
-                        <h3 className="sea-card-title">{card.title}</h3>
-                        <p className="sea-card-desc">{card.description}</p>
-                      </div>
-
-                      <div className="sea-card-footer">
-                        <button type="button" className="sea-card-btn">
-                          Audit in Lab <span>→</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
             {/* Bottom White Mist Layer (height: 46%) */}
             <div
               className={`sea-mist-layer ${introState !== 'running' ? 'risen' : ''}`}
@@ -936,35 +659,17 @@ export function App() {
               ))}
             </div>
 
-            {/* Center Hero Heading & Actions */}
-            <div className="sea-home-hero">
-              <span className="sea-hero-kicker">#BuildHybridAI 2026</span>
-              <h1 className="sea-hero-title">Zero-Trust AI Contract Firewall</h1>
-              <p className="sea-hero-subtitle">
-                Air-gapped on-device Gemini Nano redaction stops scam clauses and PII leaks before intelligent escalation to Gemini 2.5 Flash in Firebase.
-              </p>
-              <div className="sea-hero-actions">
-                <button
-                  type="button"
-                  className="sea-btn-primary"
-                  onClick={() => {
-                    window.location.hash = '#build';
-                    setCurrentView('build');
-                  }}
-                >
-                  Open Audit Lab →
-                </button>
-                <button
-                  type="button"
-                  className="sea-btn-secondary"
-                  onClick={() => {
-                    setRingRotation((prev) => prev + 45);
-                  }}
-                >
-                  Spin 16 Threat Cards ↻
-                </button>
-              </div>
-            </div>
+            {/* Section 6 Home Stage (Top Row Editorial Headline, Live Stats, Pointer Preview & 3D Cylindrical Ring of 16 Cards) */}
+            <HomeStage
+              isRevealed={introState !== 'running'}
+              historyCount={history.length}
+              nanoLatency={stage1Result?.latencyMs ?? null}
+              onNavigateToLab={() => {
+                window.location.hash = '#build';
+                setCurrentView('build');
+              }}
+              onCardSelect={handleSelectSlotCard}
+            />
           </div>
         </div>
       </div>
