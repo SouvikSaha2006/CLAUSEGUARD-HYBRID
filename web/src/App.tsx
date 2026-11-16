@@ -3,8 +3,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useClauseGuard } from './hooks/useClauseGuard';
-import { PRESET_CONTRACTS } from './data/presets';
 import { HomeStage } from './components/HomeStage';
+import { BuildAuditLab } from './components/BuildAuditLab';
 import { RING_16_CARDS, type RingCardData } from './data/ringCards';
 import './styles/seaRing.css';
 
@@ -98,9 +98,27 @@ export function App() {
     refreshNanoStatus,
   } = useClauseGuard();
 
+  // Reduced motion preference
+  const [reducedMotion, setReducedMotion] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      setReducedMotion(e.matches);
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
   // Navigation & View State ('home' = FIREWALL, 'build' = AUDIT LAB)
   const [currentView, setCurrentView] = useState<'home' | 'build'>(() => {
-    return window.location.hash === '#build' ? 'build' : 'home';
+    return typeof window !== 'undefined' && window.location.hash === '#build' ? 'build' : 'home';
   });
 
   // Opening Sequence State ('running' | 'revealing' | 'completed')
@@ -129,11 +147,7 @@ export function App() {
   const loaderClauseRef = useRef<HTMLHeadingElement | null>(null);
   const navWordmarkRef = useRef<HTMLSpanElement | null>(null);
   const videoHomeRef = useRef<HTMLVideoElement | null>(null);
-  const videoBuildRef = useRef<HTMLVideoElement | null>(null);
   const [videoPlaying, setVideoPlaying] = useState(false);
-
-  // Copy status feedback for counter-offer draft
-  const [copiedDraft, setCopiedDraft] = useState(false);
 
   // Spring Parallax State (pointer coordinates & spring simulation)
   const [parallaxOffset, setParallaxOffset] = useState({
@@ -149,7 +163,7 @@ export function App() {
   const currentPointerRef = useRef({ x: 0, y: 0 });
   const velocityPointerRef = useRef({ x: 0, y: 0 });
 
-  // 1. Sync URL hash with current view
+  // 1. Sync URL hash with current view (Section 9: View Routing)
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash;
@@ -322,15 +336,16 @@ export function App() {
 
   // 7. Video visibility playback control
   useEffect(() => {
-    const vid = currentView === 'home' ? videoHomeRef.current : videoBuildRef.current;
-    if (vid) {
-      vid.play().catch(() => {});
+    if (currentView === 'home' && videoHomeRef.current) {
+      videoHomeRef.current.play().catch(() => {});
     }
   }, [currentView]);
 
   // 8. Fine-pointer Spring Parallax Loop
   // Stiffness: 40, Damping: 18, Mass: 1
   useEffect(() => {
+    if (reducedMotion) return;
+
     const handlePointerMove = (e: PointerEvent) => {
       const cx = window.innerWidth / 2;
       const cy = window.innerHeight / 2;
@@ -386,7 +401,7 @@ export function App() {
       window.removeEventListener('pointermove', handlePointerMove);
       cancelAnimationFrame(animId);
     };
-  }, []);
+  }, [reducedMotion]);
 
   // Card select -> Load into Audit Lab & Switch View
   const handleSelectSlotCard = (card: RingCardData) => {
@@ -397,21 +412,6 @@ export function App() {
     }
     window.location.hash = '#build';
     setCurrentView('build');
-  };
-
-  // Handle PDF Upload
-  const handlePdfChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      await uploadPdf(file);
-    }
-  };
-
-  // Copy counter-offer draft helper
-  const handleCopyDraft = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedDraft(true);
-    setTimeout(() => setCopiedDraft(false), 2000);
   };
 
   // Format 3-digit odometer string (e.g. 000, 042, 100)
@@ -577,31 +577,33 @@ export function App() {
             </div>
 
             {/* Jittering Grain Layer */}
-            <div className="sea-grain-layer" />
+            {!reducedMotion && <div className="sea-grain-layer" />}
 
             {/* 12 Back Petals */}
-            <div
-              className="sea-petals-back-layer"
-              style={{
-                transform: `translate3d(${parallaxOffset.backPetalsX}px, ${parallaxOffset.backPetalsY}px, 0)`,
-              }}
-            >
-              {BACK_PETALS.map((petal) => (
-                <div
-                  key={petal.id}
-                  className="sea-petal"
-                  style={{
-                    top: petal.top,
-                    left: petal.left,
-                    width: petal.width,
-                    height: petal.height,
-                    opacity: petal.opacity,
-                    animation: `${petal.animationName} ${petal.duration} ease-in-out infinite alternate`,
-                    animationDelay: petal.delay,
-                  }}
-                />
-              ))}
-            </div>
+            {!reducedMotion && (
+              <div
+                className="sea-petals-back-layer"
+                style={{
+                  transform: `translate3d(${parallaxOffset.backPetalsX}px, ${parallaxOffset.backPetalsY}px, 0)`,
+                }}
+              >
+                {BACK_PETALS.map((petal) => (
+                  <div
+                    key={petal.id}
+                    className="sea-petal"
+                    style={{
+                      top: petal.top,
+                      left: petal.left,
+                      width: petal.width,
+                      height: petal.height,
+                      opacity: petal.opacity,
+                      animation: `${petal.animationName} ${petal.duration} ease-in-out infinite alternate`,
+                      animationDelay: petal.delay,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Bottom White Mist Layer (height: 46%) */}
             <div
@@ -612,52 +614,56 @@ export function App() {
             />
 
             {/* 5 Front Petals (z: 3) */}
-            <div
-              className="sea-petals-front-layer"
-              style={{
-                transform: `translate3d(${parallaxOffset.frontPetalsX}px, ${parallaxOffset.frontPetalsY}px, 0)`,
-              }}
-            >
-              {FRONT_PETALS.map((petal) => (
-                <div
-                  key={petal.id}
-                  className="sea-petal"
-                  style={{
-                    top: petal.top,
-                    left: petal.left,
-                    width: petal.width,
-                    height: petal.height,
-                    opacity: petal.opacity,
-                    filter: 'drop-shadow(0 0 6px rgba(158, 216, 228, 0.4))',
-                    animation: `${petal.animationName} ${petal.duration} ease-in-out infinite alternate`,
-                    animationDelay: petal.delay,
-                  }}
-                />
-              ))}
-            </div>
+            {!reducedMotion && (
+              <div
+                className="sea-petals-front-layer"
+                style={{
+                  transform: `translate3d(${parallaxOffset.frontPetalsX}px, ${parallaxOffset.frontPetalsY}px, 0)`,
+                }}
+              >
+                {FRONT_PETALS.map((petal) => (
+                  <div
+                    key={petal.id}
+                    className="sea-petal"
+                    style={{
+                      top: petal.top,
+                      left: petal.left,
+                      width: petal.width,
+                      height: petal.height,
+                      opacity: petal.opacity,
+                      filter: 'drop-shadow(0 0 6px rgba(158, 216, 228, 0.4))',
+                      animation: `${petal.animationName} ${petal.duration} ease-in-out infinite alternate`,
+                      animationDelay: petal.delay,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* 14 Glowing Motes (z: 4) */}
-            <div
-              className="sea-motes-layer"
-              style={{
-                transform: `translate3d(${parallaxOffset.motesX}px, ${parallaxOffset.motesY}px, 0)`,
-              }}
-            >
-              {GLOWING_MOTES.map((mote) => (
-                <div
-                  key={mote.id}
-                  className="sea-mote"
-                  style={{
-                    top: mote.top,
-                    left: mote.left,
-                    width: `${mote.size}px`,
-                    height: `${mote.size}px`,
-                    animation: `motePulse ${mote.duration} ease-in-out infinite`,
-                    animationDelay: mote.delay,
-                  }}
-                />
-              ))}
-            </div>
+            {!reducedMotion && (
+              <div
+                className="sea-motes-layer"
+                style={{
+                  transform: `translate3d(${parallaxOffset.motesX}px, ${parallaxOffset.motesY}px, 0)`,
+                }}
+              >
+                {GLOWING_MOTES.map((mote) => (
+                  <div
+                    key={mote.id}
+                    className="sea-mote"
+                    style={{
+                      top: mote.top,
+                      left: mote.left,
+                      width: `${mote.size}px`,
+                      height: `${mote.size}px`,
+                      animation: `motePulse ${mote.duration} ease-in-out infinite`,
+                      animationDelay: mote.delay,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Section 6 Home Stage (Top Row Editorial Headline, Live Stats, Pointer Preview & 3D Cylindrical Ring of 16 Cards) */}
             <HomeStage
@@ -675,416 +681,31 @@ export function App() {
       </div>
 
       {/* =====================================================================
-          4. VIEW: AUDIT LAB (#view-build)
+          4. VIEW: AUDIT LAB (#view-build) - SECTION 7 HYBRID AUDIT LAB
           ===================================================================== */}
       <div
         id="view-build"
-        className="sea-audit-lab-view"
         style={{ display: currentView === 'build' ? 'block' : 'none' }}
       >
-        {/* Ambient Sea Background for Audit Lab */}
-        <div className="sea-lab-backdrop-container">
-          <img
-            src={SEA_STILL_URL}
-            alt="Sea Atmosphere Backdrop"
-            className="sea-scene-media"
-          />
-          <video
-            ref={videoBuildRef}
-            src={SEA_LOOP_VIDEO_URL}
-            className={`sea-scene-media sea-scene-video ${videoPlaying ? 'playing' : ''}`}
-            muted
-            loop
-            playsInline
-            autoPlay
-          />
-          <div className="sea-lab-backdrop-overlay" />
-        </div>
-
-        <div className="sea-lab-container">
-          {/* Top Engine & Remote Config Control Bar */}
-          <div className="sea-engine-bar">
-            <div className="sea-engine-status-group">
-              <div className="sea-engine-chip">
-                <span
-                  className={`sea-status-indicator ${
-                    nanoStatus === 'ready'
-                      ? 'ready'
-                      : nanoStatus === 'downloading'
-                      ? 'downloading'
-                      : 'unavailable'
-                  }`}
-                />
-                <span>Gemini Nano: <strong>{nanoStatus.toUpperCase()}</strong></span>
-                <button
-                  type="button"
-                  className="sea-btn-mini"
-                  onClick={() => refreshNanoStatus()}
-                >
-                  Check Nano
-                </button>
-              </div>
-
-              <div className="sea-engine-chip">
-                <span>Routing Mode: <strong>{remoteConfigValues.routing_mode}</strong></span>
-                <span className="sea-nav-sep">|</span>
-                <span>Threshold: <strong>{remoteConfigValues.cloud_escalation_threshold}</strong></span>
-                <button
-                  type="button"
-                  className="sea-btn-mini"
-                  onClick={() => refreshRemoteConfig()}
-                >
-                  Fetch Remote Config
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <span className="sea-card-step-tag">Zero PII Leakage Guarantee</span>
-            </div>
-          </div>
-
-          {/* Error Banner */}
-          {error && (
-            <div className="sea-error-banner">
-              <strong>Engine Alert:</strong> {error}
-            </div>
-          )}
-
-          {/* Main Grid: Inputs (Left) and Results (Right) */}
-          <div className="sea-lab-grid">
-            {/* LEFT COLUMN: Ingestion, Presets, and Raw Input */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {/* Presets & PDF Ingestion */}
-              <div className="sea-glass-card">
-                <div className="sea-card-section-title">
-                  <h2>Contract Ingestion & Presets</h2>
-                  <span className="sea-card-step-tag">Step 1</span>
-                </div>
-
-                <div className="sea-presets-list">
-                  {PRESET_CONTRACTS.map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      className="sea-preset-btn"
-                      onClick={() => loadPreset(preset.id)}
-                    >
-                      <div>
-                        <div className="sea-preset-title">{preset.title}</div>
-                        <div className="sea-preset-desc">{preset.description}</div>
-                      </div>
-                      <span
-                        className={`sea-card-badge ${
-                          preset.category === 'SCAM_ALERT'
-                            ? 'critical'
-                            : preset.category === 'PREDATORY_TERMS'
-                            ? 'predatory'
-                            : 'clean'
-                        }`}
-                        style={{ marginLeft: '10px' }}
-                      >
-                        {preset.badge}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* PDF Drag & Drop Extractor */}
-                <div className="sea-pdf-zone">
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    className="sea-pdf-input"
-                    onChange={handlePdfChange}
-                  />
-                  <div className="sea-pdf-label">
-                    <span>📄 <strong>Upload Contract PDF</strong></span>
-                    <span>100% In-Browser PDF Vector Parser (Zero Network Bytes)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Raw Contract Text Input */}
-              <div className="sea-glass-card">
-                <div className="sea-card-section-title">
-                  <h2>Sensitive Contract Text</h2>
-                  <span className="sea-card-step-tag">Step 2: Air-Gap Monitored</span>
-                </div>
-
-                <div className="sea-textarea-container">
-                  <textarea
-                    rows={10}
-                    className="sea-contract-textarea"
-                    value={rawContractText}
-                    onChange={(e) => setRawContractText(e.target.value)}
-                    placeholder="Paste employment offer or contract containing sensitive personal names, emails, addresses, salaries, and restrictive covenants..."
-                  />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    className="sea-btn-primary"
-                    onClick={() => analyzeLocal()}
-                    disabled={isProcessingStage1 || !rawContractText.trim()}
-                  >
-                    {isProcessingStage1
-                      ? 'Scanning On-Device...'
-                      : 'Run Stage 1: Air-Gap Redaction & Risk Scan'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT COLUMN: Stage 1 & Stage 2 Audit Intelligence */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {/* Stage 1 Results Card */}
-              {stage1Result && (
-                <div className="sea-glass-card">
-                  <div className="sea-card-section-title">
-                    <h2>Stage 1: Air-Gapped Local Output</h2>
-                    <span className="sea-card-step-tag">Zero PII Leaked</span>
-                  </div>
-
-                  <div className="sea-telemetry-row">
-                    <div className="sea-telemetry-item">
-                      <span className="sea-telemetry-label">Risk Score</span>
-                      <span
-                        className={`sea-telemetry-value ${
-                          stage1Result.riskScore >= 70
-                            ? 'score-high'
-                            : stage1Result.riskScore >= 40
-                            ? 'score-med'
-                            : 'score-low'
-                        }`}
-                      >
-                        {stage1Result.riskScore} / 100
-                      </span>
-                    </div>
-
-                    <div className="sea-telemetry-item">
-                      <span className="sea-telemetry-label">PII Redacted</span>
-                      <span className="sea-telemetry-value">
-                        {stage1Result.piiRedactedCount} Tokens
-                      </span>
-                    </div>
-
-                    <div className="sea-telemetry-item">
-                      <span className="sea-telemetry-label">Engine</span>
-                      <span className="sea-telemetry-value">{stage1Result.engineUsed}</span>
-                    </div>
-
-                    <div className="sea-telemetry-item">
-                      <span className="sea-telemetry-label">Latency</span>
-                      <span className="sea-telemetry-value">{stage1Result.latencyMs} ms</span>
-                    </div>
-
-                    <div className="sea-telemetry-item">
-                      <span className="sea-telemetry-label">Network Sent</span>
-                      <span className="sea-telemetry-value" style={{ color: '#34D399' }}>
-                        {stage1Result.networkBytesSent} Bytes
-                      </span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 style={{ fontSize: '14px', marginBottom: '6px', color: 'var(--ink)' }}>
-                      Local Verdict:
-                    </h3>
-                    <p style={{ fontSize: '13px', color: 'var(--ink-soft)' }}>
-                      {stage1Result.localVerdict}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h3 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--ink)' }}>
-                      Detected Threat Flags:
-                    </h3>
-                    <ul className="sea-flags-list">
-                      {stage1Result.detectedFlags.map((flag, idx) => (
-                        <li key={idx} className="sea-flag-item">
-                          <span className="sea-flag-dot" />
-                          <span>{flag}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div>
-                    <h3 style={{ fontSize: '14px', marginBottom: '6px', color: 'var(--ink)' }}>
-                      Air-Gap Redacted Text (Cloud-Safe Payload):
-                    </h3>
-                    <textarea
-                      rows={5}
-                      readOnly
-                      className="sea-contract-textarea"
-                      style={{ height: '110px', fontSize: '11px', background: 'rgba(10,14,17,0.85)' }}
-                      value={stage1Result.redactedText}
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                    {stage1Result.riskScore >= remoteConfigValues.cloud_escalation_threshold && (
-                      <span style={{ fontSize: '11px', color: '#FBBF24', fontFamily: 'var(--font-mono)' }}>
-                        ⚠ Risk exceeds Remote Config threshold ({remoteConfigValues.cloud_escalation_threshold}). Cloud escalation recommended.
-                      </span>
-                    )}
-
-                    <button
-                      type="button"
-                      className="sea-btn-primary"
-                      onClick={escalateToCloud}
-                      disabled={isProcessingStage2}
-                      style={{ marginLeft: 'auto' }}
-                    >
-                      {isProcessingStage2
-                        ? 'Auditing in Firebase AI Logic Cloud...'
-                        : 'Escalate to Stage 2: Cloud Deep Legal Audit'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Stage 2 Results Card */}
-              {stage2Result && (
-                <div className="sea-glass-card">
-                  <div className="sea-card-section-title">
-                    <h2>Stage 2: Cloud Deep Legal Audit</h2>
-                    <span className="sea-card-step-tag">Gemini 2.5 Flash</span>
-                  </div>
-
-                  <div className="sea-telemetry-row">
-                    <div className="sea-telemetry-item">
-                      <span className="sea-telemetry-label">Authenticity</span>
-                      <span className="sea-telemetry-value" style={{ color: 'var(--clay)' }}>
-                        {stage2Result.authenticityVerdict}
-                      </span>
-                    </div>
-
-                    <div className="sea-telemetry-item">
-                      <span className="sea-telemetry-label">Engine</span>
-                      <span className="sea-telemetry-value">{stage2Result.engineUsed}</span>
-                    </div>
-
-                    <div className="sea-telemetry-item">
-                      <span className="sea-telemetry-label">Cloud Latency</span>
-                      <span className="sea-telemetry-value">{stage2Result.latencyMs} ms</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 style={{ fontSize: '14px', marginBottom: '6px', color: 'var(--ink)' }}>
-                      Executive Summary:
-                    </h3>
-                    <p style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.6' }}>
-                      {stage2Result.executiveSummary}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h3 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--ink)' }}>
-                      Clause Breakdown & Risk Analysis:
-                    </h3>
-                    <div className="sea-clause-breakdown">
-                      {stage2Result.clauseBreakdown.map((item, idx) => (
-                        <div key={idx} className="sea-clause-card">
-                          <div className="sea-clause-card-header">
-                            <span className="sea-clause-card-title">{item.clause}</span>
-                            <span
-                              className={`sea-card-badge ${
-                                item.riskLevel === 'CRITICAL'
-                                  ? 'critical'
-                                  : item.riskLevel === 'HIGH' || item.riskLevel === 'MEDIUM'
-                                  ? 'predatory'
-                                  : 'clean'
-                              }`}
-                            >
-                              {item.riskLevel}
-                            </span>
-                          </div>
-                          <p className="sea-clause-card-desc">{item.explanation}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 style={{ fontSize: '14px', marginBottom: '6px', color: 'var(--ink)' }}>
-                      Automated Counter-Offer & Amendment Draft:
-                    </h3>
-                    <div className="sea-counter-box">
-                      <textarea
-                        rows={5}
-                        readOnly
-                        className="sea-counter-textarea"
-                        value={stage2Result.counterOfferEmailDraft}
-                      />
-                      <button
-                        type="button"
-                        className="sea-copy-btn"
-                        onClick={() => handleCopyDraft(stage2Result.counterOfferEmailDraft)}
-                      >
-                        {copiedDraft ? 'Copied ✓' : 'Copy Draft'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Telemetry Table: Firestore Anonymized Telemetry */}
-          <div className="sea-glass-card sea-table-card">
-            <div className="sea-card-section-title">
-              <h2>Firestore Anonymized Telemetry</h2>
-              <span className="sea-card-step-tag">Zero PII Stored</span>
-            </div>
-
-            {history.length === 0 ? (
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', fontStyle: 'italic' }}>
-                No telemetry records found. Run an air-gapped contract scan to log anonymized telemetry to Firestore.
-              </p>
-            ) : (
-              <table className="sea-table">
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Risk Score</th>
-                    <th>Engine</th>
-                    <th>Stage 2?</th>
-                    <th>Local Verdict</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((rec, idx) => (
-                    <tr key={rec.id || idx}>
-                      <td>{new Date(rec.timestamp).toLocaleTimeString()}</td>
-                      <td>
-                        <span
-                          style={{
-                            fontWeight: 600,
-                            color:
-                              rec.riskScore >= 70
-                                ? '#F87171'
-                                : rec.riskScore >= 40
-                                ? '#FBBF24'
-                                : '#34D399',
-                          }}
-                        >
-                          {rec.riskScore} / 100
-                        </span>
-                      </td>
-                      <td>{rec.engineUsed}</td>
-                      <td>{rec.stage2Completed ? 'Escalated' : 'Local Only'}</td>
-                      <td>{rec.localVerdict}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
+        <BuildAuditLab
+          nanoStatus={nanoStatus}
+          remoteConfigValues={remoteConfigValues}
+          history={history}
+          rawContractText={rawContractText}
+          setRawContractText={setRawContractText}
+          isProcessingStage1={isProcessingStage1}
+          isProcessingStage2={isProcessingStage2}
+          stage1Result={stage1Result}
+          stage2Result={stage2Result}
+          error={error}
+          analyzeLocal={analyzeLocal}
+          escalateToCloud={escalateToCloud}
+          loadPreset={loadPreset}
+          uploadPdf={uploadPdf}
+          refreshRemoteConfig={refreshRemoteConfig}
+          refreshNanoStatus={refreshNanoStatus}
+          reducedMotion={reducedMotion}
+        />
       </div>
     </>
   );
