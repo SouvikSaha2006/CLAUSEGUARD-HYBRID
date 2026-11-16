@@ -2351,6 +2351,222 @@ body::before {
   color: #FECACA;
 }
 
+/* =========================================================================
+   Silent Canary Adversarial & Prompt-Injection Shield Styles
+   ========================================================================= */
+
+@keyframes canaryPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.sea-canary-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.sea-canary-badge-btn.clean {
+  background: rgba(58, 168, 208, 0.16);
+  border: 1px solid var(--clay);
+  color: var(--sage);
+}
+
+.sea-canary-badge-btn.clean:hover {
+  background: rgba(58, 168, 208, 0.28);
+}
+
+.sea-canary-badge-btn.neutralized {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid #EF4444;
+  color: #FCA5A5;
+  animation: canaryPulse 2s infinite;
+}
+
+.sea-canary-badge-btn.neutralized:hover {
+  background: rgba(239, 68, 68, 0.35);
+}
+
+.sea-canary-panel {
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(14px);
+}
+
+.sea-canary-panel.alert {
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(30, 10, 14, 0.85);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+}
+
+.sea-canary-panel.clean {
+  border: 1px solid rgba(58, 168, 208, 0.3);
+  background: rgba(8, 24, 32, 0.75);
+}
+
+.sea-canary-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sea-canary-panel.alert .sea-canary-panel-header {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.sea-canary-panel.clean .sea-canary-panel-header {
+  background: rgba(58, 168, 208, 0.1);
+}
+
+.sea-canary-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sea-canary-pulse-icon {
+  font-size: 16px;
+}
+
+.sea-canary-headline {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+}
+
+.sea-canary-panel.alert .sea-canary-headline {
+  color: #FCA5A5;
+}
+
+.sea-canary-subheadline {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.sea-canary-toggle-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: rgba(14, 24, 32, 0.6);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sea-canary-toggle-btn:hover {
+  background: rgba(24, 40, 54, 0.8);
+  color: var(--ink);
+}
+
+.sea-canary-findings-box {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(239, 68, 68, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sea-canary-panel.clean .sea-canary-findings-box {
+  border-top-color: rgba(58, 168, 208, 0.2);
+}
+
+.sea-canary-findings-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: #F87171;
+}
+
+.sea-canary-panel.clean .sea-canary-findings-title {
+  color: var(--sage);
+}
+
+.sea-canary-findings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sea-canary-finding-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #FECACA;
+  line-height: 1.4;
+  background: rgba(10, 14, 18, 0.6);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.sea-canary-panel.clean .sea-canary-finding-item {
+  color: var(--ink-soft);
+  border-color: rgba(58, 168, 208, 0.2);
+}
+
+.sea-canary-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #EF4444;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.sea-canary-dot.clean {
+  background: #34D399;
+}
+
+.sea-canary-finding-text {
+  word-break: break-word;
+}
+
+.sea-canary-guarantee-note {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-muted);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.sea-preset-radio-pill.canary-preset {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.sea-preset-radio-pill.canary-preset:hover,
+.sea-preset-radio-pill.canary-preset.active {
+  border-color: #EF4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.25);
+}
+
 /* Zero-Knowledge Entity Vault (Memory-Only) Card */
 .sea-vault-card {
   border-radius: 12px;

@@ -18,6 +18,109 @@ export interface Stage1Result {
   networkBytesSent: number;
   entityVault: Record<string, string>;
   vaultEntriesCount: number;
+  canaryStatus: 'CLEAN' | 'INJECTION_NEUTRALIZED';
+  canaryFindings: string[];
+}
+
+export interface CanaryShieldReport {
+  canaryStatus: 'CLEAN' | 'INJECTION_NEUTRALIZED';
+  canaryFindings: string[];
+  neutralizedText: string;
+  injectionsStrippedCount: number;
+}
+
+/**
+ * Silent Canary Shield: On-Device Adversarial & Prompt-Injection Detector.
+ * Scans locally for AI manipulation directives, system instruction overrides,
+ * covert HTML/markdown comments, zero-width steganography, and off-platform scam lures.
+ */
+export function runCanaryShieldScan(text: string): CanaryShieldReport {
+  const findings: string[] = [];
+  let neutralized = text;
+  let strippedCount = 0;
+
+  // 1. Scan for invisible / zero-width Unicode characters (steganographic injection)
+  const ZERO_WIDTH_REGEX = /[\u200B-\u200D\uFEFF\u00AD\u200E\u200F\u202A-\u202E\u2060-\u2064]/g;
+  const zeroWidthMatches = text.match(ZERO_WIDTH_REGEX);
+  if (zeroWidthMatches && zeroWidthMatches.length > 0) {
+    findings.push(
+      `Zero-Width Steganography: Detected and stripped ${zeroWidthMatches.length} invisible zero-width Unicode characters.`
+    );
+    neutralized = neutralized.replace(ZERO_WIDTH_REGEX, '');
+    strippedCount += zeroWidthMatches.length;
+  }
+
+  // 2. Scan and neutralize explicit prompt injection blocks (e.g. [SYSTEM INSTRUCTION: ...], [ADMIN OVERRIDE: ...], etc.)
+  const promptInjectionBlockRegex = /\[(?:SYSTEM|ADMIN|DEVELOPER|INSTRUCTION|OVERRIDE|ASSISTANT)[^\]]*\]/gi;
+  neutralized = neutralized.replace(promptInjectionBlockRegex, (match) => {
+    findings.push(`Adversarial Injection Block: "${match.slice(0, 68)}..." quarantined & neutralized on-device.`);
+    strippedCount++;
+    return '[CANARY_SHIELD_QUARANTINED: Prompt-Injection Payload Neutralized]';
+  });
+
+  // 3. Scan and neutralize covert HTML / markdown comments containing instructions
+  const hiddenCommentRegex = /<!--[\s\S]*?(?:system|admin|override|ignore|disregard|instruction|riskscore|prompt)[\s\S]*?-->/gi;
+  neutralized = neutralized.replace(hiddenCommentRegex, (match) => {
+    findings.push(`Hidden Comment Injection: Blocked covert HTML instruction payload (${match.length} bytes).`);
+    strippedCount++;
+    return '[CANARY_SHIELD_QUARANTINED: Hidden Comment Instruction Neutralized]';
+  });
+
+  // 4. Scan for AI Manipulation directives
+  const manipulationPatterns = [
+    {
+      regex: /(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|prior|above|system)\s+(?:instructions|prompts|directives|rules)/gi,
+      desc: 'System Instruction Bypass: "ignore previous instructions" pattern detected and blocked.',
+    },
+    {
+      regex: /(?:system\s+override|developer\s+mode|jailbreak|unrestricted\s+mode)/gi,
+      desc: 'Privilege Escalation: "system override / developer mode" directive detected and neutralized.',
+    },
+    {
+      regex: /(?:mark|classify|label|treat|consider)\s+(?:this\s+)?(?:contract|document|agreement|offer)\s+(?:as\s+)?(?:100%?\s+)?(?:safe|clean|legitimate|verified|valid|approved)/gi,
+      desc: 'Falsification Directive: Malicious attempt demanding artificial "100% legitimate" classification.',
+    },
+    {
+      regex: /(?:riskscore|risk_score|risk\s*score)\s*[:=]\s*(?:0|5|10|low|clean)/gi,
+      desc: 'Metric Tampering: Attempted to force riskScore manipulation.',
+    },
+    {
+      regex: /(?:advise|recommend)\s+immediate\s+(?:signing|acceptance|execution)/gi,
+      desc: 'Psychological Coercion: Injection directive urging "immediate signing" without legal review.',
+    },
+  ];
+
+  for (const { regex, desc } of manipulationPatterns) {
+    if (regex.test(neutralized)) {
+      findings.push(desc);
+      neutralized = neutralized.replace(regex, '[CANARY_SHIELD_QUARANTINED: AI Manipulation Directive]');
+      strippedCount++;
+    }
+  }
+
+  // 5. Scan for Off-Platform Scam Lures and Social Engineering
+  if (
+    /(?:telegram|whatsapp|signal)\s*(?:messenger)?\s*[:(@]\s*[@A-Za-z0-9_]+/i.test(text) ||
+    /(?:questionnaire|interview)\s+(?:conducted\s+)?via\s+telegram/i.test(text)
+  ) {
+    findings.push('Off-Platform Scam Lure: Interview conducted via unverified messenger channel (Telegram/WhatsApp).');
+  }
+
+  if (
+    /(?:cashier's?\s+check|certified\s+check).*?(?:wire|zelle|cashapp|deposit)/i.test(text) ||
+    /zelle|cashapp|direct\s+domestic\s+wire\s+transfer/i.test(text)
+  ) {
+    findings.push('Financial Scam Vector: Advance-fee counterfeit cashier check with mandatory personal wire disbursement.');
+  }
+
+  const isNeutralized = strippedCount > 0 || findings.some((f) => f.includes('Injection') || f.includes('Bypass') || f.includes('Tampering'));
+
+  return {
+    canaryStatus: isNeutralized ? 'INJECTION_NEUTRALIZED' : 'CLEAN',
+    canaryFindings: findings,
+    neutralizedText: neutralized,
+    injectionsStrippedCount: strippedCount,
+  };
 }
 
 export interface ClauseBreakdownItem {
@@ -206,35 +309,52 @@ export function sanitizeClientSideLocally(
   localVerdict: string;
   entityVault: Record<string, string>;
   vaultEntriesCount: number;
+  canaryStatus: 'CLEAN' | 'INJECTION_NEUTRALIZED';
+  canaryFindings: string[];
 } {
+  // 0. Run Silent Canary Adversarial & Prompt-Injection Scanner
+  const canaryReport = runCanaryShieldScan(text);
   const vaultMgr = existingVaultMgr || new EntityVaultManager();
   const flags: string[] = [];
   let score = 15;
 
+  if (canaryReport.canaryStatus === 'INJECTION_NEUTRALIZED') {
+    score = 98;
+    flags.push('CRITICAL: Adversarial prompt-injection attack neutralized on-device by Silent Canary Shield');
+    for (const finding of canaryReport.canaryFindings) {
+      if (finding.includes('Injection') || finding.includes('Directive') || finding.includes('Bypass') || finding.includes('Tampering')) {
+        flags.push(`CANARY DEFENSE: ${finding}`);
+      }
+    }
+  }
+
+  // Work with neutralized text so adversarial injection payloads are stripped before Cloud Stage 2
+  const workText = canaryReport.neutralizedText;
+
   // 1. Register Emails -> [CONTACT_n]
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-  const emails = text.match(emailRegex) || [];
+  const emails = workText.match(emailRegex) || [];
   for (const email of emails) {
     vaultMgr.register(email, 'CONTACT');
   }
 
   // 2. Register Phone numbers -> [CONTACT_n]
   const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
-  const phones = text.match(phoneRegex) || [];
+  const phones = workText.match(phoneRegex) || [];
   for (const phone of phones) {
     vaultMgr.register(phone, 'CONTACT');
   }
 
   // 3. Register Physical Addresses -> [CONTACT_n]
   const addressRegex = /\b\d{1,5}\s+([A-Za-z0-9#.\s]+),\s*(?:Suite\s+[0-9A-Za-z]+,\s*|Apt\s+[0-9A-Za-z]+,\s*)?([A-Za-z\s]+),\s*([A-Z]{2})\s*(\d{5})(?:-\d{4})?\b/g;
-  const addresses = text.match(addressRegex) || [];
+  const addresses = workText.match(addressRegex) || [];
   for (const addr of addresses) {
     vaultMgr.register(addr, 'CONTACT');
   }
 
   const prefixedAddrRegex = /(?:Candidate\s+Address|Address):\s*([^\n,\r]+(?:,\s*[^\n,\r]+)+)/gi;
   let addrMatch: RegExpExecArray | null;
-  while ((addrMatch = prefixedAddrRegex.exec(text)) !== null) {
+  while ((addrMatch = prefixedAddrRegex.exec(workText)) !== null) {
     if (addrMatch[1]) {
       vaultMgr.register(addrMatch[1].trim(), 'CONTACT');
     }
@@ -242,47 +362,47 @@ export function sanitizeClientSideLocally(
 
   // 4. Register SSNs / Tax IDs / PAN / Aadhaar / Passport / Bank IDs -> [ID_n]
   const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
-  const ssns = text.match(ssnRegex) || [];
+  const ssns = workText.match(ssnRegex) || [];
   for (const ssn of ssns) {
     vaultMgr.register(ssn, 'ID');
   }
 
   const panRegex = /\b[A-Z]{5}[0-9]{4}[A-Z]\b/g;
-  const pans = text.match(panRegex) || [];
+  const pans = workText.match(panRegex) || [];
   for (const pan of pans) {
     vaultMgr.register(pan, 'ID');
   }
 
   const aadhaarRegex = /\b\d{4}[-\s]\d{4}[-\s]\d{4}\b/g;
-  const aadhaars = text.match(aadhaarRegex) || [];
+  const aadhaars = workText.match(aadhaarRegex) || [];
   for (const aadh of aadhaars) {
     vaultMgr.register(aadh, 'ID');
   }
 
   const idPrefixedRegex = /\b(ID Reference|SSN|Social Security Number(?:\s*\/\s*Tax ID)?|Tax ID|PAN|Aadhaar|Passport(?:\s*(?:No|Number))?|Bank Account|Routing(?:\s*Number)?):\s*([^\n,\r]+)/gi;
   let idMatch: RegExpExecArray | null;
-  while ((idMatch = idPrefixedRegex.exec(text)) !== null) {
+  while ((idMatch = idPrefixedRegex.exec(workText)) !== null) {
     if (idMatch[2]) {
       vaultMgr.register(idMatch[2].trim(), 'ID');
     }
   }
 
   const empIdRegex = /\b(EMP|REF|ID)-[0-9A-Z]{4,12}\b/gi;
-  const empIds = text.match(empIdRegex) || [];
+  const empIds = workText.match(empIdRegex) || [];
   for (const emp of empIds) {
     vaultMgr.register(emp, 'ID');
   }
 
   // 5. Register Salaries / Bonuses / Compensation figures -> [COMPENSATION_n]
   const currencyRegex = /(?:\$|USD|INR|₹|Rs\.?)\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?:\s?(?:per\s?year|\/yr|annually|hourly|\/hr|per\s?month|\/mo|k|million|lakh|crore))?/gi;
-  const currencies = text.match(currencyRegex) || [];
+  const currencies = workText.match(currencyRegex) || [];
   for (const curr of currencies) {
     vaultMgr.register(curr, 'COMPENSATION');
   }
 
   const compPrefixedRegex = /\b(Base Salary|Sign-On Bonus|Base Compensation|Bonus|Liquidated damages|amount of):\s*([^\n,\r]+)/gi;
   let compMatch: RegExpExecArray | null;
-  while ((compMatch = compPrefixedRegex.exec(text)) !== null) {
+  while ((compMatch = compPrefixedRegex.exec(workText)) !== null) {
     if (compMatch[2]) {
       const val = compMatch[2].trim();
       if (/\d/.test(val)) {
@@ -294,7 +414,7 @@ export function sanitizeClientSideLocally(
   // 6. Register Candidate / Person Names -> [PERSON_n]
   const namePrefixedRegex = /\b(Candidate Name|Candidate|Employee|Prepared for|Payable to):\s*([^\n,\r]+)/gi;
   let nameMatch: RegExpExecArray | null;
-  while ((nameMatch = namePrefixedRegex.exec(text)) !== null) {
+  while ((nameMatch = namePrefixedRegex.exec(workText)) !== null) {
     if (nameMatch[2]) {
       const val = nameMatch[2].trim();
       if (val.length > 2 && !val.includes('$') && !/^\d+$/.test(val)) {
@@ -305,14 +425,14 @@ export function sanitizeClientSideLocally(
 
   const dearRegex = /Dear\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?),/g;
   let dearMatch: RegExpExecArray | null;
-  while ((dearMatch = dearRegex.exec(text)) !== null) {
+  while ((dearMatch = dearRegex.exec(workText)) !== null) {
     if (dearMatch[1]) {
       vaultMgr.register(dearMatch[1].trim(), 'PERSON');
     }
   }
 
   // 7. Register Organization / Company Names -> [ORG_n]
-  const firstLines = text.slice(0, 320).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const firstLines = workText.slice(0, 320).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (firstLines.length > 0) {
     const topHeader = firstLines[0];
     if (/(?:INC|LLC|PBC|CORP|LTD|SYSTEMS|TECHNOLOGIES|SOLUTIONS)\b/i.test(topHeader)) {
@@ -322,7 +442,7 @@ export function sanitizeClientSideLocally(
 
   const orgPrefixedRegex = /\b(Company|Employer|Organization|Recipient):\s*([^\n,\r]+)/gi;
   let orgMatch: RegExpExecArray | null;
-  while ((orgMatch = orgPrefixedRegex.exec(text)) !== null) {
+  while ((orgMatch = orgPrefixedRegex.exec(workText)) !== null) {
     if (orgMatch[2]) {
       const val = orgMatch[2].trim();
       if (val.length > 2 && !val.includes('@') && !val.includes('http')) {
@@ -333,17 +453,17 @@ export function sanitizeClientSideLocally(
 
   const behalfRegex = /On behalf of\s+([A-Z][A-Za-z0-9\s.,&-]+?(?:,\s*PBC|,\s*Inc\.?|,\s*LLC)?)(?:,\s*we\s+are|\s*\()/gi;
   let behalfMatch: RegExpExecArray | null;
-  while ((behalfMatch = behalfRegex.exec(text)) !== null) {
+  while ((behalfMatch = behalfRegex.exec(workText)) !== null) {
     if (behalfMatch[1]) {
       vaultMgr.register(behalfMatch[1].trim(), 'ORG');
     }
   }
 
   // Apply substitutions from vault
-  const { redactedText, count } = vaultMgr.applyRedaction(text);
+  const { redactedText, count } = vaultMgr.applyRedaction(workText);
 
   // 8. Analyze Predatory Clauses and Scam Signatures
-  const lower = text.toLowerCase();
+  const lower = workText.toLowerCase();
 
   // Scam / Advance-fee flags
   if (
@@ -353,7 +473,8 @@ export function sanitizeClientSideLocally(
     lower.includes('zelle') ||
     lower.includes('cashapp') ||
     lower.includes('telegram') ||
-    lower.includes('approved equipment provider')
+    lower.includes('approved equipment provider') ||
+    lower.includes('provisioning partner')
   ) {
     score += 55;
     flags.push('CRITICAL: Advance-fee / equipment fake check scam indicator detected');
@@ -401,7 +522,9 @@ export function sanitizeClientSideLocally(
   score = Math.min(100, Math.max(5, score));
 
   let verdict = 'Low Risk Agreement: Standard employment covenants.';
-  if (score >= 70) {
+  if (canaryReport.canaryStatus === 'INJECTION_NEUTRALIZED') {
+    verdict = 'CRITICAL ALERT: Adversarial prompt-injection & counterfeit job scam quarantined on-device.';
+  } else if (score >= 70) {
     verdict = 'CRITICAL ALERT: Severe financial or legal liability risks detected.';
   } else if (score >= 40) {
     verdict = 'ELEVATED RISK: Restrictive covenants require legal clarification or counter-offer.';
@@ -415,6 +538,8 @@ export function sanitizeClientSideLocally(
     localVerdict: verdict,
     entityVault: vaultMgr.getVault(),
     vaultEntriesCount: vaultMgr.size(),
+    canaryStatus: canaryReport.canaryStatus,
+    canaryFindings: canaryReport.canaryFindings,
   };
 }
 
@@ -512,9 +637,11 @@ ${rawText}`;
     // 2. Deterministic regex safety passes for emails, phones, SSNs, IDs, and salaries
     const safetyResult = sanitizeClientSideLocally(rawText, vaultMgr);
 
-    // Combine risk metrics
+    // Combine risk metrics (preserve canary high risk if injection neutralized)
     const nanoScore = typeof parsed.riskScore === 'number' ? parsed.riskScore : safetyResult.riskScore;
-    const finalScore = Math.min(100, Math.max(5, Math.max(nanoScore, safetyResult.riskScore)));
+    const finalScore = safetyResult.canaryStatus === 'INJECTION_NEUTRALIZED'
+      ? Math.max(98, safetyResult.riskScore)
+      : Math.min(100, Math.max(5, Math.max(nanoScore, safetyResult.riskScore)));
 
     const combinedFlags = Array.from(
       new Set([
@@ -530,12 +657,14 @@ ${rawText}`;
       piiRedactedCount: Math.max(1, safetyResult.piiRedactedCount),
       riskScore: finalScore,
       detectedFlags: combinedFlags.length > 0 ? combinedFlags : ['No severe predatory risks detected.'],
-      localVerdict: parsed.localVerdict || safetyResult.localVerdict,
+      localVerdict: safetyResult.canaryStatus === 'INJECTION_NEUTRALIZED' ? safetyResult.localVerdict : (parsed.localVerdict || safetyResult.localVerdict),
       engineUsed: 'ON_DEVICE_NANO',
       latencyMs,
       networkBytesSent: 0,
       entityVault: safetyResult.entityVault,
       vaultEntriesCount: safetyResult.vaultEntriesCount,
+      canaryStatus: safetyResult.canaryStatus,
+      canaryFindings: safetyResult.canaryFindings,
     };
   } catch (err) {
     console.info(

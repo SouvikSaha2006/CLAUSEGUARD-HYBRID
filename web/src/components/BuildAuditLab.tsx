@@ -84,6 +84,9 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
   const [isVaultOpen, setIsVaultOpen] = useState(true);
   const [isRehydrated, setIsRehydrated] = useState(false);
 
+  // Feature 2: Silent Canary Adversarial Shield details state
+  const [isCanaryOpen, setIsCanaryOpen] = useState(false);
+
   // Flash feedbacks
   const [copiedFlash, setCopiedFlash] = useState<string | null>(null);
   const [remoteConfigFlash, setRemoteConfigFlash] = useState<string | null>(null);
@@ -104,6 +107,9 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
   useEffect(() => {
     if (stage1Result && resultsRef.current) {
       resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    if (stage1Result?.canaryStatus === 'INJECTION_NEUTRALIZED') {
+      setIsCanaryOpen(true);
     }
   }, [stage1Result]);
 
@@ -135,6 +141,11 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
     setActivePresetId(presetId);
     setIsRehydrated(false);
     setIsVaultOpen(true);
+    if (presetId === 'prompt-injected-scam') {
+      setIsCanaryOpen(true);
+    } else {
+      setIsCanaryOpen(false);
+    }
     const p = loadPreset(presetId);
     if (p) {
       if (presetId === 'fake-remote-tech-scam') {
@@ -143,6 +154,9 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
       } else if (presetId === 'predatory-non-compete-ip-trap') {
         setDocType('covenant agreement with 24-mo restriction');
         setCompanyName('OmniCorp Dynamic Systems');
+      } else if (presetId === 'prompt-injected-scam') {
+        setDocType('remote offer with adversarial injection block');
+        setCompanyName('ApexNova Cloud Systems');
       } else {
         setDocType('standard engineering employment letter');
         setCompanyName('Beacon Open Technologies');
@@ -388,7 +402,7 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
               </button>
             </div>
 
-            {/* 3-Option Preset Radiogroup with Sliding Highlight */}
+            {/* 4-Option Preset Radiogroup with Sliding Highlight */}
             <div className="sea-preset-radiogroup">
               {PRESET_CONTRACTS.map((preset) => {
                 const isActive = activePresetId === preset.id;
@@ -397,13 +411,17 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
                   shortLabel = 'Predatory Non-Compete';
                 } else if (preset.id === 'clean-standard-offer') {
                   shortLabel = 'Standard Offer';
+                } else if (preset.id === 'prompt-injected-scam') {
+                  shortLabel = 'Prompt-Injected Scam';
                 }
 
                 return (
                   <button
                     key={preset.id}
                     type="button"
-                    className={`sea-preset-radio-pill ${isActive ? 'active' : ''}`}
+                    className={`sea-preset-radio-pill ${isActive ? 'active' : ''} ${
+                      preset.id === 'prompt-injected-scam' ? 'canary-preset' : ''
+                    }`}
                     onClick={() => handleSelectPreset(preset.id)}
                   >
                     <span>{shortLabel}</span>
@@ -571,7 +589,91 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
                       {stage1Result.riskScore}/100
                     </span>
                   </div>
+                  <div className="sea-strip-divider" />
+                  <div className="sea-strip-item sea-strip-canary-wrap">
+                    <span className="sea-strip-label">CANARY SHIELD</span>
+                    <button
+                      type="button"
+                      className={`sea-canary-badge-btn ${
+                        stage1Result.canaryStatus === 'INJECTION_NEUTRALIZED' ? 'neutralized' : 'clean'
+                      }`}
+                      onClick={() => setIsCanaryOpen((prev) => !prev)}
+                      title="Click to toggle Canary Shield adversarial breakdown"
+                    >
+                      {stage1Result.canaryStatus === 'INJECTION_NEUTRALIZED'
+                        ? '🚨 CANARY: INJECTION NEUTRALIZED'
+                        : '🛡️ CANARY: CLEAN'}
+                    </button>
+                  </div>
                 </div>
+
+                {/* Silent Canary Adversarial & Prompt-Injection Shield Panel */}
+                {(stage1Result.canaryStatus === 'INJECTION_NEUTRALIZED' || isCanaryOpen) && (
+                  <div
+                    className={`sea-canary-panel ${
+                      stage1Result.canaryStatus === 'INJECTION_NEUTRALIZED' ? 'alert' : 'clean'
+                    }`}
+                  >
+                    <div className="sea-canary-panel-header">
+                      <div className="sea-canary-panel-title">
+                        <span className="sea-canary-pulse-icon">
+                          {stage1Result.canaryStatus === 'INJECTION_NEUTRALIZED' ? '🚨' : '🛡️'}
+                        </span>
+                        <div>
+                          <div className="sea-canary-headline">
+                            {stage1Result.canaryStatus === 'INJECTION_NEUTRALIZED'
+                              ? 'SILENT CANARY SHIELD: PROMPT-INJECTION NEUTRALIZED'
+                              : 'SILENT CANARY SHIELD: ZERO ADVERSARIAL INJECTIONS'}
+                          </div>
+                          <div className="sea-canary-subheadline">
+                            {stage1Result.canaryStatus === 'INJECTION_NEUTRALIZED'
+                              ? 'Malicious AI system overrides and manipulation instructions were stripped on-device before Cloud Gemini transmission.'
+                              : 'Document verified clean of system override instructions, zero-width steganography, and hidden prompt payloads.'}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="sea-canary-toggle-btn"
+                        onClick={() => setIsCanaryOpen((prev) => !prev)}
+                      >
+                        {isCanaryOpen ? 'Hide ▲' : 'Inspect ▼'}
+                      </button>
+                    </div>
+
+                    {isCanaryOpen && (
+                      <div className="sea-canary-findings-box">
+                        <div className="sea-canary-findings-title">
+                          {stage1Result.canaryStatus === 'INJECTION_NEUTRALIZED'
+                            ? 'ADVERSARIAL VECTORS IDENTIFIED & QUARANTINED ON-DEVICE:'
+                            : 'DEFENSE PROTOCOL VERIFICATIONS:'}
+                        </div>
+                        <div className="sea-canary-findings-grid">
+                          {stage1Result.canaryFindings.length > 0 ? (
+                            stage1Result.canaryFindings.map((finding, idx) => (
+                              <div key={idx} className="sea-canary-finding-item">
+                                <span className="sea-canary-dot" />
+                                <span className="sea-canary-finding-text">{finding}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="sea-canary-finding-item">
+                              <span className="sea-canary-dot clean" />
+                              <span className="sea-canary-finding-text">
+                                No prompt injection, zero-width steganography, or off-platform recruitment lures found.
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="sea-canary-guarantee-note">
+                          <span>
+                            🔒 <strong>Air-Gap Integrity Guarantee:</strong> Quarantined tokens replace malicious payloads. Cloud Stage 2 (Gemini 2.5 Flash) will never execute adversarial instructions.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Zero-Knowledge Entity Vault (Memory-Only) Inspector */}
                 {stage1Result.entityVault && Object.keys(stage1Result.entityVault).length > 0 && (

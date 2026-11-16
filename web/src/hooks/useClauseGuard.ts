@@ -35,6 +35,7 @@ export interface AuditHistoryRecord {
   stage2Completed: boolean;
   authenticityVerdict?: string;
   timestamp: number;
+  canaryStatus?: 'CLEAN' | 'INJECTION_NEUTRALIZED';
 }
 
 export function useClauseGuard() {
@@ -128,6 +129,7 @@ export function useClauseGuard() {
       stage2Completed: !!s2,
       authenticityVerdict: s2?.authenticityVerdict,
       timestamp: Date.now(),
+      canaryStatus: s1.canaryStatus,
     };
 
     // Update in-memory history immediately
@@ -141,6 +143,7 @@ export function useClauseGuard() {
         engineUsed: record.engineUsed,
         stage2Completed: record.stage2Completed,
         authenticityVerdict: record.authenticityVerdict || null,
+        canaryStatus: record.canaryStatus || 'CLEAN',
         timestamp: serverTimestamp(),
       });
     } catch (err) {
@@ -229,7 +232,8 @@ export function useClauseGuard() {
     async (file: File) => {
       setError(null);
       try {
-        const text = await extractTextFromPdf(file);
+        const res = await extractTextFromPdf(file);
+        const text = typeof res === 'string' ? res : res.text;
         if (!text || !text.trim()) {
           throw new Error('Extracted PDF text was empty or scanned as an image.');
         }
