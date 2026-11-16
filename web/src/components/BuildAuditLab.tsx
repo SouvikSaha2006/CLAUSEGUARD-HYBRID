@@ -93,6 +93,22 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
   const [pointerOffset, setPointerOffset] = useState({ x: 0, y: 0 });
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  // Result scroll refs
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+  const stage2Ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (stage1Result && resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [stage1Result]);
+
+  useEffect(() => {
+    if (stage2Result && stage2Ref.current) {
+      stage2Ref.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [stage2Result]);
+
   // Pointer move for parallax
   useEffect(() => {
     if (reducedMotion) return;
@@ -490,7 +506,7 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
                 4. LIVE SPLIT-SCREEN PRIVACY DIFF & AUDIT RESULTS
                 =============================================================== */}
             {stage1Result && (
-              <div className="sea-results-expansion">
+              <div ref={resultsRef} className="sea-results-expansion">
                 {/* Stage 1 Telemetry Strip */}
                 <div className="sea-telemetry-strip">
                   <div className="sea-strip-item">
@@ -572,7 +588,7 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
 
                 {/* Stage 2 Cloud Gemini 2.5 Flash Report */}
                 {stage2Result && (
-                  <div className="sea-stage2-report-card">
+                  <div ref={stage2Ref} className="sea-stage2-report-card">
                     <div className="sea-stage2-header">
                       <div>
                         <div className="sea-stage2-kicker">STAGE 2: CLOUD DEEP LEGAL AUDIT</div>
