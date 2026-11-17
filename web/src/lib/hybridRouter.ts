@@ -7,6 +7,8 @@ export type OnDeviceStatus = 'ready' | 'downloading' | 'unavailable';
 
 export type EntityCategory = 'PERSON' | 'ORG' | 'COMPENSATION' | 'CONTACT' | 'ID';
 
+export type UserPersona = 'grad_intern' | 'freelancer' | 'startup_engineer';
+
 export interface Stage1Result {
   redactedText: string;
   piiRedactedCount: number;
@@ -20,6 +22,7 @@ export interface Stage1Result {
   vaultEntriesCount: number;
   canaryStatus: 'CLEAN' | 'INJECTION_NEUTRALIZED';
   canaryFindings: string[];
+  userPersona?: UserPersona;
 }
 
 export interface CanaryShieldReport {
@@ -300,7 +303,8 @@ export async function checkOnDeviceStatus(): Promise<OnDeviceStatus> {
  */
 export function sanitizeClientSideLocally(
   text: string,
-  existingVaultMgr?: EntityVaultManager
+  existingVaultMgr?: EntityVaultManager,
+  userPersona: UserPersona = 'grad_intern'
 ): {
   redactedText: string;
   piiRedactedCount: number;
@@ -311,6 +315,7 @@ export function sanitizeClientSideLocally(
   vaultEntriesCount: number;
   canaryStatus: 'CLEAN' | 'INJECTION_NEUTRALIZED';
   canaryFindings: string[];
+  userPersona: UserPersona;
 } {
   // 0. Run Silent Canary Adversarial & Prompt-Injection Scanner
   const canaryReport = runCanaryShieldScan(text);
@@ -519,15 +524,128 @@ export function sanitizeClientSideLocally(
     flags.push('Standard fair employment protections verified');
   }
 
+  // 9. Three-Tier Leverage Persona Calibrations
+  if (userPersona === 'grad_intern') {
+    if (
+      lower.includes('training bond') ||
+      lower.includes('training expense') ||
+      lower.includes('training cost') ||
+      lower.includes('repayment') ||
+      lower.includes('clawback') ||
+      lower.includes('reimburse the company') ||
+      lower.includes('depart within 12') ||
+      lower.includes('depart within twelve')
+    ) {
+      score += 30;
+      flags.push('PERSONA SENSITIVITY [Grad/Intern]: Unconscionable training bond / departure clawback penalty clause');
+    }
+    if (
+      lower.includes('unpaid overtime') ||
+      lower.includes('exempt from overtime') ||
+      lower.includes('no overtime') ||
+      lower.includes('stipend only')
+    ) {
+      score += 20;
+      flags.push('PERSONA SENSITIVITY [Grad/Intern]: Overtime compensation exclusion or intern wage misclassification');
+    }
+    if (
+      lower.includes('college') ||
+      lower.includes('university') ||
+      lower.includes('hackathon') ||
+      lower.includes('coursework') ||
+      lower.includes('academic') ||
+      lower.includes('prior to employment') ||
+      lower.includes('outside working hours')
+    ) {
+      score += 20;
+      flags.push('PERSONA SENSITIVITY [Grad/Intern]: Overbroad IP assignment capturing collegiate, academic, or hackathon works');
+    }
+  } else if (userPersona === 'freelancer') {
+    if (
+      lower.includes('net 60') ||
+      lower.includes('net 90') ||
+      lower.includes('net-60') ||
+      lower.includes('net-90') ||
+      lower.includes('60 days') ||
+      lower.includes('90 days') ||
+      lower.includes('client acceptance') ||
+      lower.includes('sole discretion')
+    ) {
+      score += 30;
+      flags.push('PERSONA SENSITIVITY [Freelancer]: Predatory delayed payment terms (Net-60/90) or subjective acceptance gate');
+    }
+    if (
+      lower.includes('unlimited revisions') ||
+      lower.includes('until client satisfaction') ||
+      lower.includes('revise without additional fee')
+    ) {
+      score += 25;
+      flags.push('PERSONA SENSITIVITY [Freelancer]: Uncapped revision cycles without change-order compensation safeguards');
+    }
+    if (
+      lower.includes('no kill fee') ||
+      lower.includes('without payment for work') ||
+      lower.includes('terminate at will without liability') ||
+      (lower.includes('work made for hire') && !lower.includes('upon receipt of payment'))
+    ) {
+      score += 20;
+      flags.push('PERSONA SENSITIVITY [Freelancer]: Missing kill-fee protection and premature work-for-hire rights transfer');
+    }
+  } else if (userPersona === 'startup_engineer') {
+    if (
+      lower.includes('24 months') ||
+      lower.includes('twenty-four (24) months') ||
+      lower.includes('non-competition') ||
+      lower.includes('non-compete')
+    ) {
+      score += 30;
+      flags.push('PERSONA SENSITIVITY [Startup Engineer]: Restrictive 24-month non-compete suppressing career mobility');
+    }
+    if (
+      lower.includes('moonlighting') ||
+      lower.includes('outside business activities') ||
+      lower.includes('exclusive devotion') ||
+      lower.includes('entire working time')
+    ) {
+      score += 25;
+      flags.push('PERSONA SENSITIVITY [Startup Engineer]: Total moonlighting prohibition restricting open-source and advisory roles');
+    }
+    if (
+      lower.includes('equity') ||
+      lower.includes('stock option') ||
+      lower.includes('vesting') ||
+      lower.includes('single trigger') ||
+      lower.includes('repurchase right') ||
+      lower.includes('forfeiture of unvested')
+    ) {
+      score += 20;
+      flags.push('PERSONA SENSITIVITY [Startup Engineer]: Missing double-trigger equity acceleration upon change of control');
+    }
+    if (
+      lower.includes('outside working hours') ||
+      lower.includes('personal time') ||
+      lower.includes('inventions')
+    ) {
+      score += 20;
+      flags.push('PERSONA SENSITIVITY [Startup Engineer]: Missing statutory invention assignment carve-outs (e.g. CA Lab Code § 2870)');
+    }
+  }
+
   score = Math.min(100, Math.max(5, score));
 
   let verdict = 'Low Risk Agreement: Standard employment covenants.';
   if (canaryReport.canaryStatus === 'INJECTION_NEUTRALIZED') {
     verdict = 'CRITICAL ALERT: Adversarial prompt-injection & counterfeit job scam quarantined on-device.';
   } else if (score >= 70) {
-    verdict = 'CRITICAL ALERT: Severe financial or legal liability risks detected.';
+    if (userPersona === 'grad_intern') {
+      verdict = 'CRITICAL ALERT [Grad/Intern]: High risk of predatory training bond, overtime forfeiture, or student IP expropriation.';
+    } else if (userPersona === 'freelancer') {
+      verdict = 'CRITICAL ALERT [Freelancer]: Severe cash-flow risk from Net-60/90 terms, uncapped revisions, or uncompensated rights transfer.';
+    } else {
+      verdict = 'CRITICAL ALERT [Startup Engineer]: Unfavorable covenants detected across 24-mo non-compete, moonlighting bans, or equity acceleration.';
+    }
   } else if (score >= 40) {
-    verdict = 'ELEVATED RISK: Restrictive covenants require legal clarification or counter-offer.';
+    verdict = `ELEVATED RISK [${userPersona.toUpperCase()}]: Restrictive covenants require legal clarification or counter-offer.`;
   }
 
   return {
@@ -540,6 +658,7 @@ export function sanitizeClientSideLocally(
     vaultEntriesCount: vaultMgr.size(),
     canaryStatus: canaryReport.canaryStatus,
     canaryFindings: canaryReport.canaryFindings,
+    userPersona,
   };
 }
 
@@ -552,7 +671,8 @@ export function sanitizeClientSideLocally(
  */
 export async function runStage1LocalAirGap(
   rawText: string,
-  forcePreferOnDevice = false
+  forcePreferOnDevice = false,
+  userPersona: UserPersona = 'grad_intern'
 ): Promise<Stage1Result> {
   const startTime = performance.now();
   const mode = forcePreferOnDevice ? InferenceMode.PREFER_ON_DEVICE : InferenceMode.ONLY_ON_DEVICE;
@@ -571,8 +691,18 @@ export async function runStage1LocalAirGap(
       },
     });
 
+    let personaGuidance = '';
+    if (userPersona === 'grad_intern') {
+      personaGuidance = 'Active Persona: "grad_intern" (Grad / Intern). Heighten sensitivity to unpaid training bonds, clawback penalties for early departure, unpaid overtime, and broad IP assignment capturing collegiate/academic/hackathon works.';
+    } else if (userPersona === 'freelancer') {
+      personaGuidance = 'Active Persona: "freelancer" (Freelancer / Contractor). Heighten sensitivity to Net-60/90 payment delays, missing kill-fee protections, unlimited revisions without change orders, and full work-for-hire rights transfers prior to full payment.';
+    } else {
+      personaGuidance = 'Active Persona: "startup_engineer" (Startup Engineer). Heighten sensitivity to 24-month non-competes, single-trigger vs double-trigger equity acceleration upon change of control, moonlighting bans, and statutory invention assignment carve-outs (e.g. CA Lab Code § 2870).';
+    }
+
     const prompt = `You are a fast on-device privacy air-gap entity extractor and risk scanner.
 Extract sensitive personally identifiable information (PII) items from this contract and evaluate risk.
+${personaGuidance}
 Do NOT output the full contract text. Output ONLY a strict JSON object conforming to this schema:
 {
   "entities": [
@@ -635,7 +765,7 @@ ${rawText}`;
     }
 
     // 2. Deterministic regex safety passes for emails, phones, SSNs, IDs, and salaries
-    const safetyResult = sanitizeClientSideLocally(rawText, vaultMgr);
+    const safetyResult = sanitizeClientSideLocally(rawText, vaultMgr, userPersona);
 
     // Combine risk metrics (preserve canary high risk if injection neutralized)
     const nanoScore = typeof parsed.riskScore === 'number' ? parsed.riskScore : safetyResult.riskScore;
@@ -665,6 +795,7 @@ ${rawText}`;
       vaultEntriesCount: safetyResult.vaultEntriesCount,
       canaryStatus: safetyResult.canaryStatus,
       canaryFindings: safetyResult.canaryFindings,
+      userPersona,
     };
   } catch (err) {
     console.info(
@@ -673,7 +804,7 @@ ${rawText}`;
     );
 
     // Deterministic client-side air-gap execution fallback
-    const localResult = sanitizeClientSideLocally(rawText, vaultMgr);
+    const localResult = sanitizeClientSideLocally(rawText, vaultMgr, userPersona);
     const latencyMs = Math.round(performance.now() - startTime);
 
     return {
@@ -681,6 +812,7 @@ ${rawText}`;
       engineUsed: forcePreferOnDevice ? 'CLOUD_FALLBACK' : 'ON_DEVICE_NANO',
       latencyMs,
       networkBytesSent: 0,
+      userPersona,
     };
   }
 }
@@ -692,7 +824,8 @@ ${rawText}`;
  */
 export async function runStage2CloudAudit(
   redactedText: string,
-  entityVault?: Record<string, string>
+  entityVault?: Record<string, string>,
+  userPersona: UserPersona = 'grad_intern'
 ): Promise<Stage2Result> {
   const startTime = performance.now();
 
@@ -736,16 +869,33 @@ export async function runStage2CloudAudit(
     }
   }
 
+  let personaInstruction = '';
+  if (userPersona === 'grad_intern') {
+    personaInstruction = `LEVERAGE PERSONA CALIBRATION: Grad / Intern
+- Tone & Strategy: Heighten sensitivity to unpaid "training bonds", clawback penalties, unpaid overtime, and broad IP assignment of college/personal hackathon projects.
+- Counter-Offer Email: Draft a POLITE, COLLABORATIVE clarification & counter-offer email requesting friendly adjustments: removing training bonds, clarifying overtime, and carving out personal/college projects.`;
+  } else if (userPersona === 'freelancer') {
+    personaInstruction = `LEVERAGE PERSONA CALIBRATION: Freelancer / Independent Contractor
+- Tone & Strategy: Heighten sensitivity to Net-60/90 payment delays, kill-fee omissions, unlimited revisions, and full work-for-hire rights transfers before payment.
+- Counter-Offer Email: Draft a CLEAR SCOPE-PROTECTION & MILESTONE-BILLING ADDENDUM establishing Net-15/30 terms, milestone payments, revision caps, and kill fees.`;
+  } else {
+    personaInstruction = `LEVERAGE PERSONA CALIBRATION: Startup Engineer
+- Tone & Strategy: Heighten sensitivity to 24-month non-competes, single-trigger vs double-trigger equity acceleration, moonlighting bans, and invention assignment carve-outs.
+- Counter-Offer Email: Draft a FIRM, REDLINE-READY legal counter-proposal with specific contract clause amendments (non-compete reduction to <6 months, double-trigger acceleration, open-source carve-outs).`;
+  }
+
   const prompt = `You are a high-tier legal auditor analyzing an anonymized employment agreement where all personal identifiable information (PII) has been air-gap redacted using a Zero-Knowledge Entity Vault.
 
 CRITICAL PRIVACY TOKEN INSTRUCTION:
 The contract contains privacy tokens such as [PERSON_1], [ORG_1], [COMPENSATION_1], and [CONTACT_1]. Preserve these exact bracketed tokens verbatim inside your executiveSummary, clauseBreakdown, and counterOfferEmailDraft. Do NOT invent real names or remove the bracketed tokens.
 
+${personaInstruction}
+
 Analyze the following sanitized contract and provide:
-1. Executive Summary: High-level executive overview of risks and legal liabilities. Preserve privacy tokens.
+1. Executive Summary: High-level executive overview of risks and legal liabilities tailored to this persona. Preserve privacy tokens.
 2. Clause Breakdown: Array of clauses with riskLevel ('LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL') and clear explanation.
 3. Authenticity Verdict: Clear verdict on whether the document is a counterfeit job scam, predatory contract, or standard legitimate offer.
-4. Counter-Offer Email Draft: Professional, polite email draft to HR or the recruiter proposing safe amendments or questioning suspicious items. Address the recipient organization as [ORG_1] and sign as [PERSON_1].
+4. Counter-Offer Email Draft: Formatted according to the persona instructions above. Address the recipient organization as [ORG_1] and sign as [PERSON_1].
 
 Return ONLY strict valid JSON:
 {
@@ -797,7 +947,16 @@ ${redactedText}`;
     const isPredatory =
       redactedText.toLowerCase().includes('non-compete') ||
       redactedText.toLowerCase().includes('liquidated damages') ||
-      redactedText.toLowerCase().includes('outside working hours');
+      redactedText.toLowerCase().includes('outside working hours') ||
+      redactedText.toLowerCase().includes('net-90') ||
+      redactedText.toLowerCase().includes('net-60') ||
+      redactedText.toLowerCase().includes('net 90') ||
+      redactedText.toLowerCase().includes('net 60') ||
+      redactedText.toLowerCase().includes('unlimited revisions') ||
+      redactedText.toLowerCase().includes('training bond') ||
+      redactedText.toLowerCase().includes('clawback') ||
+      redactedText.toLowerCase().includes('kill fee') ||
+      redactedText.toLowerCase().includes('moonlighting');
 
     const breakdown: ClauseBreakdownItem[] = [];
 
@@ -815,18 +974,46 @@ ${redactedText}`;
           'Legitimate enterprise employers like [ORG_1] do not conduct interviews exclusively via unverified messaging channels without identity verification.',
       });
     } else if (isPredatory) {
-      breakdown.push({
-        clause: '24-Month Worldwide Non-Compete',
-        riskLevel: 'CRITICAL',
-        explanation:
-          'Overly broad geographic scope and excessive 2-year duration severely restricts future employment of [PERSON_1] and violates FTC guidelines and state public policy.',
-      });
-      breakdown.push({
-        clause: 'Universal Invention Assignment (Personal Time & Prior Works)',
-        riskLevel: 'HIGH',
-        explanation:
-          'Attempts to claim ownership over works created by [PERSON_1] outside working hours without [ORG_1] resources, exceeding permissible statutory boundaries (e.g. CA Lab Code 2870).',
-      });
+      if (userPersona === 'grad_intern') {
+        breakdown.push({
+          clause: 'Training Bond & Early Departure Clawback',
+          riskLevel: 'CRITICAL',
+          explanation:
+            'Liquidated damages or training reimbursement clauses penalize [PERSON_1] if departing early, often deemed unenforceable and coercive for junior talent.',
+        });
+        breakdown.push({
+          clause: 'Pre-Employment & Collegiate Inventions Assignment',
+          riskLevel: 'HIGH',
+          explanation:
+            'Expropriates academic coursework, hackathon repositories, and personal side projects created by [PERSON_1] prior to or outside employment hours.',
+        });
+      } else if (userPersona === 'freelancer') {
+        breakdown.push({
+          clause: 'Delayed Payment & Extended Invoicing Terms (Net-60/90)',
+          riskLevel: 'CRITICAL',
+          explanation:
+            'Excessive payment delays shift financial risk onto [PERSON_1] without late fees, interest, or milestone advance guarantees.',
+        });
+        breakdown.push({
+          clause: 'Uncapped Revisions & Subjective Acceptance',
+          riskLevel: 'HIGH',
+          explanation:
+            'Allows [ORG_1] to demand unlimited rework cycles without change-order compensation or clear acceptance criteria.',
+        });
+      } else {
+        breakdown.push({
+          clause: '24-Month Worldwide Non-Compete',
+          riskLevel: 'CRITICAL',
+          explanation:
+            'Overly broad geographic scope and excessive 2-year duration severely restricts future employment of [PERSON_1] and violates FTC guidelines and state public policy.',
+        });
+        breakdown.push({
+          clause: 'Universal Invention Assignment & Moonlighting Ban',
+          riskLevel: 'HIGH',
+          explanation:
+            'Prohibits personal open-source contributions and attempts to claim IP created outside working hours without company resources (exceeding CA Lab Code § 2870).',
+        });
+      }
       breakdown.push({
         clause: 'Liquidated Damages & Fee Shifting',
         riskLevel: 'HIGH',
@@ -847,25 +1034,36 @@ ${redactedText}`;
       });
     }
 
+    let emailDraft = '';
+    if (isScam) {
+      emailDraft = `Dear Recruiting Team at [ORG_1],\n\nI have reviewed the offer. To adhere to corporate financial security practices, I request that [ORG_1] ship pre-configured hardware directly from your corporate supplier, rather than processing personal funds or cashier checks. Please confirm if hardware can be dispatched directly.\n\nBest regards,\n[PERSON_1]`;
+    } else if (isPredatory) {
+      if (userPersona === 'grad_intern') {
+        emailDraft = `Dear Hiring Team at [ORG_1],\n\nThank you so much for this offer! I am very excited about the opportunity to join [ORG_1]. I wanted to ask about a few clauses to ensure mutual clarity:\n1. Training Bond / Clawback: Could we remove the clause requiring reimbursement of onboarding training expenses in case of departure?\n2. Academic & Personal IP: Could we clarify that college coursework, thesis code, and hackathon projects developed on personal equipment remain my personal IP?\n3. Working Hours: Clarifying that overtime commitments align with fair compensation guidelines.\n\nThank you for understanding, and I look forward to working together!\n\nWarm regards,\n[PERSON_1]`;
+      } else if (userPersona === 'freelancer') {
+        emailDraft = `Dear Accounts & Hiring Team at [ORG_1],\n\nThank you for engaging my services. Prior to project kick-off, I request that we attach the following Standard Contractor Scope & Billing Addendum:\n1. Payment Terms: Invoices payable Net-15 (or Net-30 maximum) upon milestone submission.\n2. Revision Scope: Scope covers up to two (2) rounds of revisions; subsequent revisions billed at agreed hourly rate.\n3. Kill Fee: A 50% kill fee applies if the project is cancelled for client convenience prior to milestone completion.\n4. IP Transfer: Full work-for-hire copyright transfer effective upon receipt of final invoice payment.\n\nBest regards,\n[PERSON_1]`;
+      } else {
+        emailDraft = `Dear Executive Team at [ORG_1],\n\nThank you for the offer. I am enthusiastic about contributing to the technical roadmap at [ORG_1]. To finalize the agreement, I propose the following standard redline amendments to Exhibit B:\n1. Section 4 (Non-Compete): Narrow duration from 24 months worldwide to 6 months strictly limited to direct competitive products.\n2. Section 7 (Invention Assignment): Carve out pre-existing inventions and personal open-source projects per California Labor Code § 2870.\n3. Section 9 (Equity Acceleration): Include standard double-trigger acceleration (100% vesting upon change-of-control followed by involuntary termination).\n\nLooking forward to executing the revised agreement.\n\nSincerely,\n[PERSON_1]`;
+      }
+    } else {
+      emailDraft = `Dear Hiring Manager at [ORG_1],\n\nThank you for extending this offer. I am thrilled to accept the position on the Core Platform team and look forward to joining [ORG_1] on the scheduled start date.\n\nWarm regards,\n[PERSON_1]`;
+    }
+
     const latencyMs = Math.round(performance.now() - startTime);
 
     return {
       executiveSummary: isScam
         ? 'DANGER: Highly probable advance-fee employment scam involving [ORG_1]. Immediate wire transfer required for equipment is a known fraud vector targeting [PERSON_1].'
         : isPredatory
-        ? 'HIGH RISK: Unusually aggressive restrictive covenants and overbroad IP assignment imposed by [ORG_1] that pose severe career encumbrance on [PERSON_1].'
+        ? `HIGH RISK [${userPersona.toUpperCase()} CALIBRATION]: Aggressive restrictive covenants and overbroad assignment terms imposed by [ORG_1] pose severe career encumbrance on [PERSON_1].`
         : 'FAIR TERMS: Standard, balanced engineering employment offer from [ORG_1] compliant with fair labor best practices.',
       clauseBreakdown: breakdown,
       authenticityVerdict: isScam
         ? 'FRAUDULENT / COUNTERFEIT: High-confidence advance-fee check scam.'
         : isPredatory
-        ? 'LEGAL RISK: Valid legal entity [ORG_1] but punitive and unconscionable clauses.'
+        ? `LEGAL RISK [${userPersona.toUpperCase()}]: Valid legal entity [ORG_1] with punitive covenants requiring calibrated counter-proposal.`
         : 'LEGITIMATE: Standard commercial employment offer from [ORG_1].',
-      counterOfferEmailDraft: isScam
-        ? `Dear Recruiting Team at [ORG_1],\n\nI have reviewed the offer. To adhere to corporate financial security practices, I request that [ORG_1] ship pre-configured hardware directly from your corporate supplier, rather than processing personal funds or cashier checks. Please confirm if hardware can be dispatched directly.\n\nBest regards,\n[PERSON_1]`
-        : isPredatory
-        ? `Dear Hiring Team at [ORG_1],\n\nThank you for this offer. I am excited about the prospect of joining [ORG_1]. Upon review of Sections 1 and 2, I would like to propose standard amendments:\n1. Non-compete: Restricting duration to 6 months in direct competing products rather than worldwide 24 months.\n2. Inventions: Confirming that personal side projects developed outside work hours on personal hardware remain excluded per Exhibit A.\n\nLooking forward to your thoughts.\n\nSincerely,\n[PERSON_1]`
-        : `Dear Hiring Manager at [ORG_1],\n\nThank you for extending this offer. I am thrilled to accept the position on the Core Platform team and look forward to joining [ORG_1] on the scheduled start date.\n\nWarm regards,\n[PERSON_1]`,
+      counterOfferEmailDraft: emailDraft,
       engineUsed: 'CLOUD_GEMINI_2_5_FLASH',
       latencyMs,
     };

@@ -8,6 +8,7 @@ import {
   type OnDeviceStatus,
   type Stage1Result,
   type Stage2Result,
+  type UserPersona,
 } from '../lib/hybridRouter';
 import {
   fetchRemoteConfigValues,
@@ -36,10 +37,13 @@ export interface AuditHistoryRecord {
   authenticityVerdict?: string;
   timestamp: number;
   canaryStatus?: 'CLEAN' | 'INJECTION_NEUTRALIZED';
+  userPersona?: UserPersona;
 }
 
 export function useClauseGuard() {
   const [nanoStatus, setNanoStatus] = useState<OnDeviceStatus>('unavailable');
+  const [userPersona, setUserPersona] = useState<UserPersona>('grad_intern');
+  const [lastRemoteConfigFetch, setLastRemoteConfigFetch] = useState<number>(() => Date.now());
   const [remoteConfigValues, setRemoteConfigValues] = useState<RemoteConfigValues>({
     routing_mode: 'hybrid_airgap',
     cloud_escalation_threshold: 60,
@@ -60,8 +64,11 @@ export function useClauseGuard() {
     try {
       const cfg = await fetchRemoteConfigValues();
       setRemoteConfigValues(cfg);
+      setLastRemoteConfigFetch(Date.now());
+      return cfg;
     } catch (err) {
       console.warn('[ClauseGuard] Remote config fetch warning:', err);
+      return null;
     }
   }, []);
 
@@ -130,6 +137,7 @@ export function useClauseGuard() {
       authenticityVerdict: s2?.authenticityVerdict,
       timestamp: Date.now(),
       canaryStatus: s1.canaryStatus,
+      userPersona: s1.userPersona || userPersona,
     };
 
     // Update in-memory history immediately
@@ -144,6 +152,7 @@ export function useClauseGuard() {
         stage2Completed: record.stage2Completed,
         authenticityVerdict: record.authenticityVerdict || null,
         canaryStatus: record.canaryStatus || 'CLEAN',
+        userPersona: record.userPersona || 'grad_intern',
         timestamp: serverTimestamp(),
       });
     } catch (err) {
@@ -153,8 +162,9 @@ export function useClauseGuard() {
 
   // 4. Run Stage 1: Local Air-Gap Redaction & Risk Score
   const analyzeLocal = useCallback(
-    async (textOverride?: string) => {
+    async (textOverride?: string, personaOverride?: UserPersona) => {
       const text = textOverride !== undefined ? textOverride : rawContractText;
+      const activePersona = personaOverride || userPersona;
       if (!text || !text.trim()) {
         setError('Please enter contract text or select a preset document.');
         return;
@@ -166,7 +176,7 @@ export function useClauseGuard() {
 
       try {
         const forcePrefer = remoteConfigValues.routing_mode === 'hybrid_prefer_device';
-        const res = await runStage1LocalAirGap(text, forcePrefer);
+        const res = await runStage1LocalAirGap(text, forcePrefer, activePersona);
         setStage1Result(res);
 
         // Auto-persist anonymized Stage 1 telemetry
@@ -185,7 +195,7 @@ export function useClauseGuard() {
         setIsProcessingStage1(false);
       }
     },
-    [rawContractText, remoteConfigValues]
+    [rawContractText, remoteConfigValues, userPersona]
   );
 
   // 5. Run Stage 2: Cloud Deep Legal Audit
@@ -199,7 +209,12 @@ export function useClauseGuard() {
     setIsProcessingStage2(true);
 
     try {
-      const res = await runStage2CloudAudit(stage1Result.redactedText, stage1Result.entityVault);
+      const activePersona = stage1Result.userPersona || userPersona;
+      const res = await runStage2CloudAudit(
+        stage1Result.redactedText,
+        stage1Result.entityVault,
+        activePersona
+      );
       setStage2Result(res);
 
       // Persist full anonymized audit telemetry (NEVER persists entityVault)
@@ -210,7 +225,7 @@ export function useClauseGuard() {
     } finally {
       setIsProcessingStage2(false);
     }
-  }, [stage1Result]);
+  }, [stage1Result, userPersona]);
 
   // 6. Preset Loader
   const loadPreset = useCallback(
@@ -252,6 +267,9 @@ export function useClauseGuard() {
 
   return {
     nanoStatus,
+    userPersona,
+    setUserPersona,
+    lastRemoteConfigFetch,
     remoteConfigValues,
     history,
     rawContractText,

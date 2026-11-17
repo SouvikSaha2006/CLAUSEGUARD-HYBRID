@@ -2,7 +2,7 @@
 // BuildAuditLab.tsx - Section 7: Interactive Hybrid Audit Lab, Diff Engine & Cloud Escalation
 
 import React, { useState, useRef, useEffect } from 'react';
-import type { Stage1Result, Stage2Result } from '../lib/hybridRouter';
+import type { Stage1Result, Stage2Result, UserPersona } from '../lib/hybridRouter';
 import type { RemoteConfigValues } from '../lib/firebase';
 import type { AuditHistoryRecord } from '../hooks/useClauseGuard';
 import { PRESET_CONTRACTS, type ContractPreset } from '../data/presets';
@@ -37,6 +37,9 @@ const BUILD_PETALS = [
 
 export interface BuildAuditLabProps {
   nanoStatus: 'ready' | 'downloading' | 'unavailable';
+  userPersona: UserPersona;
+  setUserPersona: (persona: UserPersona) => void;
+  lastRemoteConfigFetch: number;
   remoteConfigValues: RemoteConfigValues;
   history: AuditHistoryRecord[];
   rawContractText: string;
@@ -46,17 +49,20 @@ export interface BuildAuditLabProps {
   stage1Result: Stage1Result | null;
   stage2Result: Stage2Result | null;
   error: string | null;
-  analyzeLocal: (textOverride?: string) => Promise<void>;
+  analyzeLocal: (textOverride?: string, personaOverride?: UserPersona) => Promise<void>;
   escalateToCloud: () => Promise<void>;
   loadPreset: (presetId: string) => ContractPreset | undefined;
   uploadPdf: (file: File) => Promise<string | null>;
-  refreshRemoteConfig: () => Promise<void>;
+  refreshRemoteConfig: () => Promise<RemoteConfigValues | void | null>;
   refreshNanoStatus: () => Promise<void>;
   reducedMotion?: boolean;
 }
 
 export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
   nanoStatus,
+  userPersona,
+  setUserPersona,
+  lastRemoteConfigFetch,
   remoteConfigValues,
   history,
   rawContractText,
@@ -86,6 +92,13 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
 
   // Feature 2: Silent Canary Adversarial Shield details state
   const [isCanaryOpen, setIsCanaryOpen] = useState(false);
+
+  // Feature 3: Live Policy Inspector & Policy Simulation state
+  const [isPolicyInspectorOpen, setIsPolicyInspectorOpen] = useState(false);
+  const [isSyncingPolicy, setIsSyncingPolicy] = useState(false);
+  const [simulatedThreshold, setSimulatedThreshold] = useState<number | null>(null);
+
+  const activeThreshold = simulatedThreshold ?? remoteConfigValues.cloud_escalation_threshold;
 
   // Flash feedbacks
   const [copiedFlash, setCopiedFlash] = useState<string | null>(null);
@@ -185,12 +198,26 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
     setTimeout(() => setCopiedFlash(null), 1600);
   };
 
-  // Fetch Remote Config Handler
-  const handleRefreshConfig = async () => {
-    await refreshRemoteConfig();
-    await refreshNanoStatus();
-    setRemoteConfigFlash(`Config: ${remoteConfigValues.routing_mode} · Escalate > ${remoteConfigValues.cloud_escalation_threshold}`);
-    setTimeout(() => setRemoteConfigFlash(null), 2500);
+  // Sync Remote Config Now from Policy Inspector
+  const handleSyncPolicyNow = async () => {
+    setIsSyncingPolicy(true);
+    try {
+      const updated = await refreshRemoteConfig();
+      await refreshNanoStatus();
+      setSimulatedThreshold(null);
+      const mode =
+        updated && typeof updated === 'object' && 'routing_mode' in updated
+          ? (updated as RemoteConfigValues).routing_mode
+          : remoteConfigValues.routing_mode;
+      const thresh =
+        updated && typeof updated === 'object' && 'cloud_escalation_threshold' in updated
+          ? (updated as RemoteConfigValues).cloud_escalation_threshold
+          : remoteConfigValues.cloud_escalation_threshold;
+      setRemoteConfigFlash(`Synced Remote Config: ${mode} · Threshold: ${thresh}`);
+      setTimeout(() => setRemoteConfigFlash(null), 3000);
+    } finally {
+      setIsSyncingPolicy(false);
+    }
   };
 
   // Copy Draft Email Handler
@@ -346,23 +373,34 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
               <div className="sea-build-kicker">
                 <span>STAGE 1: ON-DEVICE GEMINI NANO AIR-GAP SCANNER</span>
               </div>
-              <div className="sea-build-badge-pill">
-                <span
-                  className={`sea-status-indicator ${
-                    nanoStatus === 'ready'
-                      ? 'ready'
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="sea-policy-inspector-trigger-pill"
+                  onClick={() => setIsPolicyInspectorOpen(true)}
+                  title="Live Firebase Remote Config Policy Inspector"
+                >
+                  <span className="sea-policy-flame-dot">🔥</span>
+                  <span>POLICY: {remoteConfigValues.routing_mode} (&gt;{activeThreshold})</span>
+                </button>
+                <div className="sea-build-badge-pill">
+                  <span
+                    className={`sea-status-indicator ${
+                      nanoStatus === 'ready'
+                        ? 'ready'
+                        : nanoStatus === 'downloading'
+                        ? 'downloading'
+                        : 'unavailable'
+                    }`}
+                  />
+                  <span>
+                    {nanoStatus === 'ready'
+                      ? 'ON-DEVICE READY'
                       : nanoStatus === 'downloading'
-                      ? 'downloading'
-                      : 'unavailable'
-                  }`}
-                />
-                <span>
-                  {nanoStatus === 'ready'
-                    ? 'ON-DEVICE READY'
-                    : nanoStatus === 'downloading'
-                    ? 'DOWNLOADING NANO'
-                    : 'CLOUD FALLBACK'}
-                </span>
+                      ? 'DOWNLOADING NANO'
+                      : 'CLOUD FALLBACK'}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -400,6 +438,71 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
               >
                 Prefer On-Device
               </button>
+            </div>
+
+            {/* 3-Tier Leverage Persona Engine Calibration Tabs */}
+            <div className="sea-persona-calibration-container">
+              <div className="sea-persona-bar-header">
+                <span className="sea-persona-kicker">LEVERAGE PERSONA CALIBRATION:</span>
+                <span className="sea-persona-active-badge">
+                  {userPersona === 'grad_intern' ? '🎓 GRAD / INTERN' : userPersona === 'freelancer' ? '💼 FREELANCER' : '🚀 STARTUP ENGINEER'}
+                </span>
+              </div>
+              <div className="sea-persona-tabs">
+                <button
+                  type="button"
+                  className={`sea-persona-tab ${userPersona === 'grad_intern' ? 'active' : ''}`}
+                  onClick={() => {
+                    setUserPersona('grad_intern');
+                    if (stage1Result && rawContractText.trim()) analyzeLocal(rawContractText, 'grad_intern');
+                  }}
+                  title="Calibrated for new graduates, students, and interns"
+                >
+                  <span className="sea-persona-tab-icon">🎓</span>
+                  <span className="sea-persona-tab-text">Grad / Intern</span>
+                </button>
+                <button
+                  type="button"
+                  className={`sea-persona-tab ${userPersona === 'freelancer' ? 'active' : ''}`}
+                  onClick={() => {
+                    setUserPersona('freelancer');
+                    if (stage1Result && rawContractText.trim()) analyzeLocal(rawContractText, 'freelancer');
+                  }}
+                  title="Calibrated for freelancers and independent contractors"
+                >
+                  <span className="sea-persona-tab-icon">💼</span>
+                  <span className="sea-persona-tab-text">Freelancer</span>
+                </button>
+                <button
+                  type="button"
+                  className={`sea-persona-tab ${userPersona === 'startup_engineer' ? 'active' : ''}`}
+                  onClick={() => {
+                    setUserPersona('startup_engineer');
+                    if (stage1Result && rawContractText.trim()) analyzeLocal(rawContractText, 'startup_engineer');
+                  }}
+                  title="Calibrated for startup engineers and founding talent"
+                >
+                  <span className="sea-persona-tab-icon">🚀</span>
+                  <span className="sea-persona-tab-text">Startup Engineer</span>
+                </button>
+              </div>
+              <div className="sea-persona-caption">
+                {userPersona === 'grad_intern' && (
+                  <span>
+                    <strong>Sensitivity:</strong> Unpaid training bonds, departure clawbacks, unpaid overtime & collegiate/hackathon IP capture. <strong>Cloud Email:</strong> Polite, collaborative clarification.
+                  </span>
+                )}
+                {userPersona === 'freelancer' && (
+                  <span>
+                    <strong>Sensitivity:</strong> Net-60/90 payment delays, uncapped revisions, kill-fee omissions & rights transfers before payment. <strong>Cloud Email:</strong> Scope-protection & milestone-billing addendum.
+                  </span>
+                )}
+                {userPersona === 'startup_engineer' && (
+                  <span>
+                    <strong>Sensitivity:</strong> 24-month non-competes, single vs double-trigger acceleration, moonlighting bans & CA Labor Code § 2870. <strong>Cloud Email:</strong> Firm, redline-ready legal counter-proposal.
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* 4-Option Preset Radiogroup with Sliding Highlight */}
@@ -488,12 +591,12 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
                 </svg>
               </button>
 
-              {/* Ghost Button 2: Orbit/Share icon (Fetch Remote Config) */}
+              {/* Ghost Button 2: Orbit/Settings icon (Live Remote Config Policy Inspector) */}
               <button
                 type="button"
-                className="sea-ghost-round-btn"
-                onClick={handleRefreshConfig}
-                title="Fetch Remote Config"
+                className={`sea-ghost-round-btn ${isPolicyInspectorOpen ? 'active' : ''}`}
+                onClick={() => setIsPolicyInspectorOpen((prev) => !prev)}
+                title="Live Firebase Remote Config Policy Inspector"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="3" />
@@ -512,7 +615,7 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
                 }}
                 onPointerMove={handleBtnPointerMove}
                 onPointerLeave={handleBtnPointerLeave}
-                onClick={() => analyzeLocal(rawContractText)}
+                onClick={() => analyzeLocal(rawContractText, userPersona)}
                 disabled={isProcessingStage1 || !rawContractText.trim()}
               >
                 <span>
@@ -526,7 +629,7 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
               {stage1Result && (
                 <button
                   type="button"
-                  className="sea-cloud-escalate-pill-btn"
+                  className={`sea-cloud-escalate-pill-btn ${stage1Result.riskScore >= activeThreshold ? 'highlighted-escalation' : ''}`}
                   onClick={escalateToCloud}
                   disabled={isProcessingStage2}
                 >
@@ -539,11 +642,55 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
               )}
             </div>
 
-            {/* Threshold Escalation Advice */}
-            {stage1Result && stage1Result.riskScore >= remoteConfigValues.cloud_escalation_threshold && (
-              <div className="sea-threshold-advice">
-                ⚠ Risk score ({stage1Result.riskScore}) exceeds threshold ({remoteConfigValues.cloud_escalation_threshold}). Cloud escalation recommended.
-              </div>
+            {/* Hybrid Policy Decision Card (Feature 3: Live Firebase Remote Config Policy Router) */}
+            {stage1Result && (
+              stage1Result.riskScore < activeThreshold ? (
+                <div className="sea-policy-decision-card resolved">
+                  <div className="sea-policy-card-top">
+                    <span className="sea-policy-dot resolved" />
+                    <span className="sea-policy-heading resolved">
+                      Hybrid Policy Decision: Resolved 100% On-Device ($0.00 Cloud Cost)
+                    </span>
+                    <span className="sea-policy-tag resolved">{remoteConfigValues.routing_mode}</span>
+                  </div>
+                  <div className="sea-policy-card-body">
+                    <p className="sea-policy-desc">
+                      Because local risk (<strong>{stage1Result.riskScore}/100</strong>) is below the Firebase Remote Config policy threshold (<strong>{activeThreshold}/100</strong>), zero cloud tokens were spent. All PII redactions and covenant checks resolved strictly in client ephemeral memory.
+                    </p>
+                    <button
+                      type="button"
+                      className="sea-policy-force-link"
+                      onClick={escalateToCloud}
+                      disabled={isProcessingStage2}
+                    >
+                      {isProcessingStage2 ? 'Escalating...' : 'Force Cloud Audit Anyway ↗'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="sea-policy-decision-card alert">
+                  <div className="sea-policy-card-top">
+                    <span className="sea-policy-dot alert" />
+                    <span className="sea-policy-heading alert">
+                      Hybrid Policy Decision: Threshold Exceeded ({stage1Result.riskScore} ≥ {activeThreshold}) — Cloud Legal Audit Recommended
+                    </span>
+                    <span className="sea-policy-tag alert">{remoteConfigValues.routing_mode}</span>
+                  </div>
+                  <div className="sea-policy-card-body">
+                    <p className="sea-policy-desc">
+                      Local air-gap scan identified elevated predatory liabilities ({stage1Result.riskScore}/100) exceeding policy limit ({activeThreshold}/100). Cloud escalation recommended to obtain Gemini 2.5 Flash legal counter-proposals.
+                    </p>
+                    <button
+                      type="button"
+                      className="sea-policy-escalate-btn"
+                      onClick={escalateToCloud}
+                      disabled={isProcessingStage2}
+                    >
+                      {isProcessingStage2 ? 'Auditing in Cloud...' : 'Escalate Redacted Skeleton to Cloud ↗'}
+                    </button>
+                  </div>
+                </div>
+              )
             )}
 
             {/* ===============================================================
@@ -861,8 +1008,24 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
                       {/* Counter-Offer / Clarification Email Draft */}
                       <div className="sea-counter-offer-section">
                         <div className="sea-counter-header">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <strong>Automated Counter-Offer / Clarification Draft:</strong>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <strong>
+                              {userPersona === 'grad_intern'
+                                ? 'Automated Clarification & Friendly Counter-Offer Draft:'
+                                : userPersona === 'freelancer'
+                                ? 'Automated Scope & Milestone-Billing Addendum Draft:'
+                                : 'Automated Redline-Ready Legal Counter-Proposal:'}
+                            </strong>
+                            <span
+                              className="sea-diff-token-badge token-persona"
+                              style={{ fontSize: '9px' }}
+                            >
+                              {userPersona === 'grad_intern'
+                                ? '🎓 Grad / Intern'
+                                : userPersona === 'freelancer'
+                                ? '💼 Freelancer'
+                                : '🚀 Startup Engineer'}
+                            </span>
                             {isRehydrated && (
                               <span className="sea-diff-token-badge token-comp" style={{ fontSize: '9px' }}>
                                 Local Substitution Active
@@ -958,6 +1121,141 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
           )}
         </div>
       </footer>
+
+      {/* ===================================================================
+          6. LIVE FIREBASE REMOTE CONFIG POLICY INSPECTOR MODAL
+          =================================================================== */}
+      {isPolicyInspectorOpen && (
+        <div
+          className="sea-policy-modal-overlay"
+          onClick={() => setIsPolicyInspectorOpen(false)}
+        >
+          <div
+            className="sea-policy-modal-window"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sea-policy-modal-top">
+              <div className="sea-policy-modal-title-group">
+                <span className="sea-policy-firebase-flame">🔥</span>
+                <div>
+                  <h4 className="sea-policy-modal-title">Firebase Remote Config Policy Router</h4>
+                  <p className="sea-policy-modal-subtitle">
+                    Real-time cloud policy parameters governing on-device air-gap vs cloud escalation
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="sea-policy-close-x"
+                onClick={() => setIsPolicyInspectorOpen(false)}
+                title="Close Policy Inspector"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="sea-policy-params-list">
+              {/* Parameter 1: routing_mode */}
+              <div className="sea-policy-param-card">
+                <div className="sea-policy-param-info">
+                  <span className="sea-policy-param-key">routing_mode</span>
+                  <span className="sea-policy-param-caption">Firebase Remote Config Parameter</span>
+                </div>
+                <div className="sea-policy-param-pill">
+                  {remoteConfigValues.routing_mode}
+                </div>
+              </div>
+
+              {/* Parameter 2: cloud_escalation_threshold */}
+              <div className="sea-policy-param-card">
+                <div className="sea-policy-param-info">
+                  <span className="sea-policy-param-key">cloud_escalation_threshold</span>
+                  <span className="sea-policy-param-caption">
+                    Risk score threshold triggering cloud Gemini escalation
+                  </span>
+                </div>
+                <div className="sea-policy-param-score-pill">
+                  {activeThreshold} / 100
+                </div>
+              </div>
+
+              {/* Parameter 3: last_sync */}
+              <div className="sea-policy-param-card">
+                <div className="sea-policy-param-info">
+                  <span className="sea-policy-param-key">last_fetch_timestamp</span>
+                  <span className="sea-policy-param-caption">
+                    Last active handshake with Firebase Remote Config servers
+                  </span>
+                </div>
+                <div className="sea-policy-param-time-pill">
+                  {new Date(lastRemoteConfigFetch).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Interactive Policy Simulator (for Judges to test in real time) */}
+            <div className="sea-policy-simulator-panel">
+              <div className="sea-policy-sim-header">
+                <span className="sea-policy-sim-title">⚡ REAL-TIME POLICY SIMULATOR</span>
+                {simulatedThreshold !== null && (
+                  <button
+                    type="button"
+                    className="sea-policy-reset-link"
+                    onClick={() => setSimulatedThreshold(null)}
+                  >
+                    Reset to Firebase ({remoteConfigValues.cloud_escalation_threshold})
+                  </button>
+                )}
+              </div>
+              <p className="sea-policy-sim-desc">
+                Adjust threshold to test live routing decisions: contracts under threshold resolve 100% on-device ($0.00 cloud cost); contracts exceeding threshold trigger cloud escalation.
+              </p>
+              <div className="sea-policy-sim-controls">
+                <input
+                  type="range"
+                  min={10}
+                  max={90}
+                  step={5}
+                  value={activeThreshold}
+                  onChange={(e) => setSimulatedThreshold(Number(e.target.value))}
+                  className="sea-policy-slider"
+                />
+                <div className="sea-policy-sim-chips">
+                  {[25, 40, 60, 80].map((presetVal) => (
+                    <button
+                      key={presetVal}
+                      type="button"
+                      className={`sea-policy-chip-btn ${activeThreshold === presetVal ? 'active' : ''}`}
+                      onClick={() => setSimulatedThreshold(presetVal)}
+                    >
+                      Threshold: {presetVal}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="sea-policy-modal-footer">
+              <button
+                type="button"
+                className="sea-policy-sync-button"
+                onClick={handleSyncPolicyNow}
+                disabled={isSyncingPolicy}
+              >
+                {isSyncingPolicy ? 'Syncing Remote Config...' : 'Sync Remote Config Now 🔄'}
+              </button>
+              <span className="sea-policy-project-badge">
+                PROJECT: <code>clauseguard-hybrid</code>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

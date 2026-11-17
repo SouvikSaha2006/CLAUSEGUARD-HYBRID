@@ -81,6 +81,9 @@ const SEA_LOOP_VIDEO_URL =
 export function App() {
   const {
     nanoStatus,
+    userPersona,
+    setUserPersona,
+    lastRemoteConfigFetch,
     remoteConfigValues,
     history,
     rawContractText,
@@ -697,6 +700,9 @@ export function App() {
       >
         <BuildAuditLab
           nanoStatus={nanoStatus}
+          userPersona={userPersona}
+          setUserPersona={setUserPersona}
+          lastRemoteConfigFetch={lastRemoteConfigFetch}
           remoteConfigValues={remoteConfigValues}
           history={history}
           rawContractText={rawContractText}
