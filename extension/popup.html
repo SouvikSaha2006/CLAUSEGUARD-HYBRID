@@ -2,163 +2,596 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>ClauseGuard Hybrid</title>
+  <title>ClauseGuard Hybrid — On-Device Offer &amp; Contract Interceptor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400&display=swap" rel="stylesheet">
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      margin: 0;
-      padding: 14px;
-      width: 360px;
-      background-color: #0f172a;
-      color: #f8fafc;
-      font-size: 13px;
+    :root {
+      --bg: #0A0E11;
+      --card-bg: rgba(20, 28, 34, 0.88);
+      --card-border: rgba(58, 168, 208, 0.28);
+      --ink: #EEF4F6;
+      --ink-soft: #94A3B8;
+      --ink-muted: #64748B;
+      --cyan: #3AA8D0;
+      --cyan-bright: #9ED8E4;
+      --primary-btn: #1E86AC;
+      --primary-btn-hover: #3AA8D0;
+      --alert-amber: #F59E0B;
+      --alert-green: #34D399;
+      --alert-red: #F87171;
+      --font-serif: 'Newsreader', Georgia, serif;
+      --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
-    .header {
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 380px;
+      background-color: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 16px;
+      overflow-x: hidden;
+      user-select: none;
+    }
+
+    /* Top Brand Row */
+    .sea-brand-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid #334155;
-      padding-bottom: 8px;
+      gap: 10px;
       margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(58, 168, 208, 0.18);
     }
-    .title {
-      font-weight: 700;
-      font-size: 14px;
-      color: #38bdf8;
+
+    .sea-brand-info {
+      display: flex;
+      flex-direction: column;
     }
-    .status-badge {
-      font-size: 11px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background-color: #1e293b;
-      color: #94a3b8;
+
+    .sea-brand-title {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    .status-badge.ready {
-      background-color: #064e3b;
-      color: #34d399;
+
+    .sea-brand-title span.accent {
+      color: var(--cyan);
+      font-style: italic;
     }
-    .status-badge.unavailable {
-      background-color: #451a03;
-      color: #fbbf24;
+
+    .sea-brand-subtitle {
+      font-size: 10px;
+      color: var(--ink-soft);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
-    button {
-      background-color: #2563eb;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      padding: 7px 12px;
+
+    /* Live Engine Badge */
+    .sea-engine-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      background: rgba(14, 28, 38, 0.85);
+      border: 1px solid rgba(58, 168, 208, 0.35);
+      color: var(--cyan-bright);
+      white-space: nowrap;
+    }
+
+    .sea-engine-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--alert-green);
+      box-shadow: 0 0 6px var(--alert-green);
+      animation: pulseDot 2s infinite ease-in-out;
+    }
+
+    .sea-engine-dot.fallback {
+      background: var(--alert-amber);
+      box-shadow: 0 0 6px var(--alert-amber);
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.85); }
+    }
+
+    /* Selection Capture Alert Bar */
+    .sea-capture-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(58, 168, 208, 0.08);
+      border: 1px dashed rgba(58, 168, 208, 0.3);
+      border-radius: 8px;
+      padding: 6px 10px;
+      margin-bottom: 10px;
+      font-size: 10.5px;
+      color: var(--cyan-bright);
+    }
+
+    .sea-capture-status span.status-icon {
       font-size: 12px;
+      margin-right: 4px;
+    }
+
+    .sea-rescan-link {
+      background: transparent;
+      border: none;
+      color: var(--cyan);
+      font-family: var(--font-mono);
+      font-size: 10px;
       font-weight: 600;
       cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+      margin: 0;
+      width: auto;
+    }
+
+    .sea-rescan-link:hover {
+      color: #fff;
+    }
+
+    /* Contract Input Area */
+    .sea-input-group {
+      margin-bottom: 12px;
+    }
+
+    .sea-input-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--ink-soft);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    textarea#inputText {
       width: 100%;
-      margin-bottom: 8px;
-      transition: background-color 0.15s ease;
+      height: 76px;
+      background: #0E161C;
+      border: 1px solid rgba(58, 168, 208, 0.25);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--ink);
+      line-height: 1.4;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
-    button:hover {
-      background-color: #1d4ed8;
+
+    textarea#inputText:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 10px rgba(58, 168, 208, 0.2);
     }
-    button.secondary {
-      background-color: #334155;
-      color: #e2e8f0;
+
+    textarea#inputText::placeholder {
+      color: var(--ink-muted);
+      font-size: 10.5px;
     }
-    button.secondary:hover {
-      background-color: #475569;
+
+    /* Actions Row */
+    .sea-buttons-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
     }
+
+    button {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      border-radius: 999px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      flex: 1;
+      height: 36px;
+      background-color: var(--primary-btn);
+      color: #04121A;
+      box-shadow: 0 4px 14px rgba(30, 134, 172, 0.35);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background-color: var(--primary-btn-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(58, 168, 208, 0.45);
+    }
+
+    .btn-secondary {
+      height: 36px;
+      padding: 0 14px;
+      background: rgba(20, 36, 48, 0.7);
+      border: 1px solid rgba(58, 168, 208, 0.3);
+      color: var(--cyan-bright);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(30, 52, 70, 0.9);
+      color: #FFFFFF;
+      border-color: var(--cyan);
+    }
+
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+      transform: none !important;
     }
-    textarea {
-      width: 100%;
-      box-sizing: border-box;
-      height: 70px;
-      background-color: #1e293b;
-      border: 1px solid #475569;
-      color: #f8fafc;
-      border-radius: 6px;
-      padding: 6px;
-      font-size: 12px;
+
+    /* Results Glass Card */
+    .sea-results-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      animation: seaFadeSlideUp 0.25s ease-out;
+    }
+
+    @keyframes seaFadeSlideUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Risk & Canary Row */
+    .sea-risk-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .sea-risk-gauge-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sea-score-number {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--alert-amber);
+    }
+
+    .sea-score-number.low { color: var(--alert-green); }
+    .sea-score-number.med { color: var(--alert-amber); }
+    .sea-score-number.high { color: var(--alert-red); }
+
+    .sea-score-caption {
+      display: flex;
+      flex-direction: column;
+      font-size: 9.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ink-soft);
+    }
+
+    .sea-score-bar-bg {
+      width: 72px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 3px;
+    }
+
+    .sea-score-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--alert-amber);
+      transition: width 0.4s ease;
+    }
+
+    .sea-score-bar-fill.low { background: var(--alert-green); }
+    .sea-score-bar-fill.med { background: var(--alert-amber); }
+    .sea-score-bar-fill.high { background: var(--alert-red); }
+
+    /* Canary Status Badge */
+    .sea-canary-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(52, 211, 153, 0.12);
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      color: #6EE7B7;
+    }
+
+    .sea-canary-badge.alert {
+      background: rgba(248, 113, 113, 0.15);
+      border-color: rgba(248, 113, 113, 0.4);
+      color: #FCA5A5;
+      animation: pulseCanary 1.8s infinite;
+    }
+
+    @keyframes pulseCanary {
+      0%, 100% { box-shadow: 0 0 0 rgba(248, 113, 113, 0.3); }
+      50% { box-shadow: 0 0 10px rgba(248, 113, 113, 0.5); }
+    }
+
+    /* Verdict */
+    .sea-verdict-text {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink);
       margin-bottom: 8px;
-      resize: vertical;
+      line-height: 1.4;
     }
-    .card {
-      background-color: #1e293b;
-      border-radius: 6px;
-      padding: 10px;
-      margin-top: 10px;
-      border: 1px solid #334155;
+
+    /* Flags List */
+    .sea-flags-box {
+      margin-bottom: 10px;
     }
-    .score-row {
+
+    .sea-flags-title {
+      font-size: 9.5px;
+      color: var(--ink-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    .sea-flags-list {
+      list-style: none;
+      max-height: 64px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .sea-flags-list li {
+      position: relative;
+      padding-left: 14px;
+      font-size: 10.5px;
+      color: #FCA5A5;
+      margin-bottom: 3px;
+      line-height: 1.35;
+    }
+
+    .sea-flags-list li::before {
+      content: '•';
+      position: absolute;
+      left: 3px;
+      color: var(--alert-amber);
+      font-size: 13px;
+      line-height: 1;
+    }
+
+    /* Redacted Preview Container */
+    .sea-preview-box {
+      margin-bottom: 12px;
+    }
+
+    .sea-preview-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
-    .score-badge {
-      font-size: 16px;
-      font-weight: bold;
-      padding: 2px 8px;
-      border-radius: 4px;
+
+    .sea-preview-header span {
+      font-size: 9.5px;
+      color: var(--ink-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
-    .score-low { background-color: #064e3b; color: #34d399; }
-    .score-med { background-color: #78350f; color: #fbbf24; }
-    .score-high { background-color: #7f1d1d; color: #f87171; }
-    .telemetry {
-      font-size: 11px;
-      color: #94a3b8;
-      margin-top: 6px;
+
+    .sea-copy-btn {
+      background: transparent;
+      border: none;
+      color: var(--cyan);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+    }
+
+    .sea-preview-scroll {
+      background: #080D10;
+      border: 1px solid rgba(58, 168, 208, 0.2);
+      border-radius: 6px;
+      padding: 8px;
+      max-height: 72px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: #CBD5E1;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .sea-preview-scroll span.token {
+      background: rgba(58, 168, 208, 0.2);
+      border: 1px solid rgba(58, 168, 208, 0.4);
+      color: var(--cyan-bright);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+
+    /* Telemetry Info */
+    .sea-telemetry-row {
       display: flex;
       justify-content: space-between;
+      font-size: 9.5px;
+      color: var(--ink-muted);
+      margin-bottom: 12px;
+      padding-top: 6px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.08);
     }
-    .flags-list {
-      margin: 6px 0;
-      padding-left: 18px;
-      color: #fca5a5;
+
+    /* Primary Handoff Button */
+    .btn-escalate-handoff {
+      width: 100%;
+      height: 38px;
+      background: linear-gradient(135deg, #1E86AC 0%, #3AA8D0 100%);
+      color: #04121A;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 4px 16px rgba(58, 168, 208, 0.4);
+      margin-top: 4px;
     }
-    .flags-list li {
-      margin-bottom: 3px;
+
+    .btn-escalate-handoff:hover {
+      background: linear-gradient(135deg, #3AA8D0 0%, #9ED8E4 100%);
+      box-shadow: 0 6px 22px rgba(58, 168, 208, 0.55);
+      transform: translateY(-1px);
     }
-    .redacted-preview {
-      background: #0f172a;
-      padding: 6px;
-      border-radius: 4px;
-      max-height: 80px;
-      overflow-y: auto;
-      font-family: monospace;
-      font-size: 11px;
-      color: #cbd5e1;
-      white-space: pre-wrap;
+
+    /* Footer Privacy Note */
+    .sea-footer-note {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 9.5px;
+      color: var(--ink-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="title">ClauseGuard Hybrid</div>
-    <div id="nanoStatus" class="status-badge">Checking Nano...</div>
+  <!-- Brand Header -->
+  <div class="sea-brand-header">
+    <div class="sea-brand-info">
+      <div class="sea-brand-title">
+        ClauseGuard <span class="accent">Hybrid</span>
+      </div>
+      <div class="sea-brand-subtitle">Offer &amp; Contract Interceptor</div>
+    </div>
+    <div id="engineBadge" class="sea-engine-badge">
+      <span id="engineDot" class="sea-engine-dot"></span>
+      <span id="engineLabel">ON-DEVICE NANO</span>
+    </div>
   </div>
 
-  <button id="btnGrabSelection">Grab Selected Text from Tab</button>
-  <textarea id="inputText" placeholder="Select contract text on page, or paste text here..."></textarea>
-  
-  <button id="btnRunAirGap">Run Local Air-Gap Scan</button>
-  <button id="btnOpenWeb" class="secondary">Open ClauseGuard Web Studio</button>
-
-  <div id="resultsCard" class="card" style="display: none;">
-    <div class="score-row">
-      <span>Risk Assessment:</span>
-      <span id="riskBadge" class="score-badge">0 / 100</span>
+  <!-- Automatic Page Text Capture Status Bar -->
+  <div id="captureStatus" class="sea-capture-status">
+    <div>
+      <span class="status-icon" id="captureIcon">🔍</span>
+      <span id="captureText">Scanning active tab selection...</span>
     </div>
-    <div id="localVerdict" style="font-weight: 600; margin-bottom: 6px;"></div>
-    <div><strong>Detected Flags:</strong></div>
-    <ul id="flagsList" class="flags-list"></ul>
-    
-    <div><strong>Redacted Content (Air-Gapped):</strong></div>
-    <div id="redactedPreview" class="redacted-preview"></div>
+    <button id="btnRescan" type="button" class="sea-rescan-link">Re-scan</button>
+  </div>
 
-    <div class="telemetry">
-      <span id="latencySpan">Latency: -- ms</span>
-      <span id="bytesSpan">Network: 0 Bytes</span>
+  <!-- Contract Input Area -->
+  <div class="sea-input-group">
+    <div class="sea-input-label">
+      <span>Contract / Offer Text</span>
+      <span id="charCountLabel">0 chars</span>
     </div>
+    <textarea id="inputText" placeholder="Highlight contract text on any web page (Gmail, LinkedIn, PDF) and open this extension, or paste clauses here..."></textarea>
+  </div>
+
+  <!-- Action Buttons Row -->
+  <div class="sea-buttons-row">
+    <button id="btnRunAirGap" type="button" class="btn-primary">
+      <span>Run On-Device Scan ⚡</span>
+    </button>
+    <button id="btnOpenWebEmpty" type="button" class="btn-secondary" title="Open ClauseGuard Web Studio in new tab">
+      <span>Web Studio ↗</span>
+    </button>
+  </div>
+
+  <!-- Stage 1 Results Glass Card -->
+  <div id="resultsCard" class="sea-results-card" style="display: none;">
+    <!-- Risk Score & Canary Row -->
+    <div class="sea-risk-row">
+      <div class="sea-risk-gauge-container">
+        <span id="riskScoreNumber" class="sea-score-number">75</span>
+        <div class="sea-score-caption">
+          <span>RISK SCORE</span>
+          <div class="sea-score-bar-bg">
+            <div id="riskScoreBarFill" class="sea-score-bar-fill" style="width: 75%;"></div>
+          </div>
+        </div>
+      </div>
+      <div id="canaryBadge" class="sea-canary-badge">
+        <span id="canaryIcon">🛡️</span>
+        <span id="canaryStatusText">CANARY: CLEAN</span>
+      </div>
+    </div>
+
+    <!-- Verdict -->
+    <div id="localVerdict" class="sea-verdict-text">
+      CRITICAL ALERT: Restrictive covenants detected on-device.
+    </div>
+
+    <!-- Flags Box -->
+    <div class="sea-flags-box">
+      <div class="sea-flags-title">Predatory Covenants &amp; Risk Flags:</div>
+      <ul id="flagsList" class="sea-flags-list">
+        <li>Unreasonable 24-month non-compete restraint</li>
+      </ul>
+    </div>
+
+    <!-- Redacted Skeleton Preview -->
+    <div class="sea-preview-box">
+      <div class="sea-preview-header">
+        <span>Sanitized Skeleton (Air-Gapped)</span>
+        <button id="btnCopyRedacted" type="button" class="sea-copy-btn">Copy</button>
+      </div>
+      <div id="redactedPreview" class="sea-preview-scroll">
+        Redacted text will appear here with [PERSON_1], [ORG_1], [COMPENSATION_1] tokens...
+      </div>
+    </div>
+
+    <!-- Telemetry -->
+    <div class="sea-telemetry-row">
+      <span id="latencySpan">Latency: 18ms</span>
+      <span id="bytesSpan">Network: 0 KB Sent (Air-Gap)</span>
+    </div>
+
+    <!-- Primary Action: Deep-Link Handoff to Web Audit Lab -->
+    <button id="btnHandoffToWeb" type="button" class="btn-escalate-handoff">
+      <span>Escalate Anonymized Skeleton to Web Audit Lab ↗</span>
+    </button>
+  </div>
+
+  <!-- Privacy Footer Guarantee -->
+  <div class="sea-footer-note">
+    <span>🔒 Zero PII Leak Guarantee · 0 Network Bytes Transmitted</span>
   </div>
 
   <script src="popup.js"></script>

@@ -93,6 +93,9 @@ export function App() {
     stage1Result,
     stage2Result,
     error,
+    isExtensionHandoff,
+    setIsExtensionHandoff,
+    ingestExtensionHandoff,
     analyzeLocal,
     escalateToCloud,
     loadPreset,
@@ -121,13 +124,13 @@ export function App() {
 
   // Navigation & View State ('home' = FIREWALL, 'build' = AUDIT LAB)
   const [currentView, setCurrentView] = useState<'home' | 'build'>(() => {
-    return typeof window !== 'undefined' && window.location.hash === '#build' ? 'build' : 'home';
+    return typeof window !== 'undefined' && window.location.hash.startsWith('#build') ? 'build' : 'home';
   });
 
   // Opening Sequence State ('running' | 'revealing' | 'completed')
   const [introState, setIntroState] = useState<'running' | 'revealing' | 'completed'>(() => {
     if (typeof window !== 'undefined') {
-      if (window.location.hash === '#build') return 'completed';
+      if (window.location.hash.startsWith('#build')) return 'completed';
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return 'completed';
     }
     return 'running';
@@ -166,13 +169,27 @@ export function App() {
   const currentPointerRef = useRef({ x: 0, y: 0 });
   const velocityPointerRef = useRef({ x: 0, y: 0 });
 
-  // 1. Sync URL hash with current view (Section 9: View Routing)
+  // 1. Sync URL hash with current view and parse deep-link parameters (Feature 4: Extension Handoff)
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash;
-      if (hash === '#build') {
+      if (hash.startsWith('#build')) {
         setCurrentView('build');
         document.body.classList.remove('view-home-locked');
+
+        // Feature 4: Parse deep-link parameters (#build?redacted=...&source=extension)
+        const qIndex = hash.indexOf('?');
+        if (qIndex !== -1) {
+          const params = new URLSearchParams(hash.slice(qIndex));
+          const source = params.get('source');
+          const redacted = params.get('redacted');
+          const riskScoreStr = params.get('riskScore');
+          const riskScore = riskScoreStr ? parseInt(riskScoreStr, 10) : undefined;
+
+          if (source === 'extension' && redacted) {
+            ingestExtensionHandoff(redacted, riskScore);
+          }
+        }
       } else {
         setCurrentView('home');
         document.body.classList.add('view-home-locked');
@@ -185,7 +202,7 @@ export function App() {
     return () => {
       window.removeEventListener('hashchange', handleHash);
     };
-  }, []);
+  }, [ingestExtensionHandoff]);
 
   // 2. Manage Home View Body Scroll Lock
   useEffect(() => {
@@ -719,6 +736,8 @@ export function App() {
           refreshRemoteConfig={refreshRemoteConfig}
           refreshNanoStatus={refreshNanoStatus}
           reducedMotion={reducedMotion}
+          isExtensionHandoff={isExtensionHandoff}
+          setIsExtensionHandoff={setIsExtensionHandoff}
         />
       </div>
     </>

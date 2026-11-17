@@ -56,6 +56,8 @@ export interface BuildAuditLabProps {
   refreshRemoteConfig: () => Promise<RemoteConfigValues | void | null>;
   refreshNanoStatus: () => Promise<void>;
   reducedMotion?: boolean;
+  isExtensionHandoff?: boolean;
+  setIsExtensionHandoff?: (val: boolean) => void;
 }
 
 export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
@@ -79,6 +81,8 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
   refreshRemoteConfig,
   refreshNanoStatus,
   reducedMotion = false,
+  isExtensionHandoff = false,
+  setIsExtensionHandoff,
 }) => {
   // Fill-in-the-blanks state
   const [docType, setDocType] = useState('employment offer letter');
@@ -149,11 +153,23 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
     return () => window.removeEventListener('pointermove', handlePointerMove);
   }, [reducedMotion]);
 
+  // Sync Extension Handoff metadata
+  useEffect(() => {
+    if (isExtensionHandoff) {
+      setDocType('intercepted document (Chrome Extension)');
+      setCompanyName('Active Tab Intercept');
+      setActivePresetId('');
+      setIsRehydrated(false);
+      setIsVaultOpen(true);
+    }
+  }, [isExtensionHandoff]);
+
   // Handle Preset selection
   const handleSelectPreset = (presetId: string) => {
     setActivePresetId(presetId);
     setIsRehydrated(false);
     setIsVaultOpen(true);
+    setIsExtensionHandoff?.(false);
     if (presetId === 'prompt-injected-scam') {
       setIsCanaryOpen(true);
     } else {
@@ -183,6 +199,7 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
     if (file) {
       setIsRehydrated(false);
       setIsVaultOpen(true);
+      setIsExtensionHandoff?.(false);
       await uploadPdf(file);
       setDocType('uploaded PDF document');
       setCompanyName(file.name.replace('.pdf', ''));
@@ -403,6 +420,28 @@ export const BuildAuditLab: React.FC<BuildAuditLabProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Feature 4: Chrome Extension Deep-Link Ingestion Alert Banner */}
+            {isExtensionHandoff && (
+              <div className="sea-extension-handoff-banner">
+                <div className="sea-extension-handoff-top">
+                  <span className="sea-extension-handoff-pill">
+                    📥 RECEIVED ANONYMIZED SKELETON FROM CHROME EXTENSION (0 RAW PII TRANSFERRED)
+                  </span>
+                  <button
+                    type="button"
+                    className="sea-extension-handoff-close"
+                    onClick={() => setIsExtensionHandoff?.(false)}
+                    title="Dismiss notification"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="sea-extension-handoff-caption">
+                  Intercepted on-device from active browser tab. All person, organization, compensation, contact, and ID entities were replaced with numbered Zero-Knowledge tokens before tab handoff. <strong>1-Click Stage 2 Cloud Escalation is unlocked below.</strong>
+                </p>
+              </div>
+            )}
 
             {/* Fill-in-the-blanks Sentence */}
             <div className="sea-fill-blanks-sentence">

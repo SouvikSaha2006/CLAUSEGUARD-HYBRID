@@ -1,14 +1,19 @@
 {
   "manifest_version": 3,
-  "name": "ClauseGuard Hybrid - Air-Gap Contract Guard",
+  "name": "ClauseGuard Hybrid — On-Device Offer & Contract Interceptor",
   "version": "1.0.0",
-  "description": "On-device contract risk scanning and PII air-gap redaction using Gemini Nano (#BuildHybridAI).",
+  "description": "On-device contract risk scanning, PII air-gap redaction, and deep legal escalation using Gemini Nano (#BuildHybridAI 2026).",
   "permissions": [
     "activeTab",
     "scripting"
   ],
+  "host_permissions": [
+    "http://localhost:5173/*",
+    "https://*.web.app/*",
+    "https://*.vercel.app/*"
+  ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "ClauseGuard Hybrid"
+    "default_title": "ClauseGuard Hybrid — On-Device Offer & Contract Interceptor"
   }
 }
